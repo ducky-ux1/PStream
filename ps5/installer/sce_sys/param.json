@@ -1,0 +1,12 @@
+{
+    "applicationCategoryType": 66048,
+    "titleId": "PSTR00001",
+    "localizedParameters": {
+        "defaultLanguage": "en-US",
+        "en-US": {
+            "titleName": "PStream"
+        }
+    },
+    "downloadDataSize": 256,
+    "webAppUri": "https://tinyurl.com/pstream-ps5-lan"
+}

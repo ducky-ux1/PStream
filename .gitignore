@@ -1,0 +1,12 @@
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS / Temporary files
+Thumbs.db
+.DS_Store
+*.log
+
+# Release packages (upload to GitHub Releases tab)
+release/*.zip
