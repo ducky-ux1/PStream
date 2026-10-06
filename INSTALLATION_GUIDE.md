@@ -50,8 +50,10 @@ Before installing PStream, make sure you have:
 
 ## 🚀 Quick Start: Installation & Update Methods
 
-Download the latest release package:
-👉 **[`PStream-PS5-v1.0.0.zip`](release/PStream-PS5-v1.0.0.zip)** (or get `pstream-install.elf` / `PStream-Installer.elf` directly from the `release/` folder).
+Download your preferred package from the Releases tab:
+* **`PStream-for-PayloadManager.zip`** ➔ **(Recommended — Zero PC):** For the on-console PS5 **Payload Manager** homebrew menu.
+* **`PStream-for-PS5Upload.zip`** ➔ For sending over Wi-Fi/LAN via the **PS5Upload** app (Port 9021).
+* **`PStream-PS5-v1.0.0.zip`** ➔ Complete bundle with both tools + offline installation guide.
 
 ---
 
