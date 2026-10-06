@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://ko-fi.com/duckyiux1"><img src="https://img.shields.io/badge/Support%20on-Ko--fi-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>
-  <img src="https://img.shields.io/badge/Platform-PS5%20(Firmware%203.xx--5.xx)-003791?style=for-the-badge&logo=playstation&logoColor=white" alt="PlayStation">
+  <img src="https://img.shields.io/badge/Platform-PS5%20(Firmware%203.xx--13.60+)-003791?style=for-the-badge&logo=playstation&logoColor=white" alt="PlayStation">
   <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/Version-v1.0.0%20Standalone-red?style=for-the-badge" alt="Version">
 </p>

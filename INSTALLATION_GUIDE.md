@@ -41,9 +41,9 @@
 ## 📋 Prerequisites
 
 Before installing PStream, make sure you have:
-1. **A Jailbroken PlayStation 5:** Firmware `3.00` through `5.50` supported.
+1. **A Jailbroken PlayStation 5:** All jailbroken firmwares (`3.00` through `13.60+`) supported.
 2. **Internet Connection on PS5:** Ethernet or Wi-Fi connected to the internet (needed to stream video and TMDb metadata).
-3. **Active ELF Loader on PS5:** Trigger your jailbreak (WebKit, BD-J, or IPv6) so the payload loader is listening on **port `9021`**.
+3. **Active ELF Loader on PS5:** Trigger your jailbreak (WebKit, BD-J, Lua, or IPv6) with payload loader listening on **port `9021`**, or use **Payload Manager** directly on-console.
 4. **Any PC, Mac, or Phone on the Same Wi-Fi/LAN:** Used **only once** for 5 seconds to send the installer payload to your PS5.
 
 ---
