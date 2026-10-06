@@ -410,91 +410,210 @@
         </div>
     </div>
 
-    <!-- Streamflix Style App Settings Modal -->
+    <!-- Streamflix Style Widescreen App Settings Modal -->
     <div id="settings-modal" class="settings-modal" style="display: none;">
-        <div class="settings-sheet">
+        <div class="settings-sheet widescreen-settings-sheet">
             <div class="settings-header">
                 <div class="settings-header-left">
                     <h2 style="font-size:30px;font-weight:900;letter-spacing:-0.5px;">Settings</h2>
-                    <span class="settings-header-sub">Preferences & Data</span>
+                    <span class="settings-header-sub">Preferences, Layout & System</span>
                 </div>
                 <button id="settings-close-btn" class="modal-close-btn" title="Close (Circle)">
                     <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
                 </button>
             </div>
             
-            <div class="settings-body">
-                <!-- Category 1: Catalog & Content Provider -->
-                <div class="setting-group">
-                    <div class="setting-title-row">
-                        <label class="setting-label">Content Catalog & Language Provider</label>
-                        <span class="setting-hint">Determines feed language, poster metadata, and default audio</span>
-                    </div>
-                    <div class="settings-provider-pills" id="settings-provider-pills">
-                        <button class="setting-pill active" data-provider="eng"><span class="lang-tag">ENG</span> English</button>
-                        <button class="setting-pill" data-provider="ger"><span class="lang-tag">GER</span> Deutsch</button>
-                        <button class="setting-pill" data-provider="ita"><span class="lang-tag">ITA</span> Italiano</button>
-                        <button class="setting-pill" data-provider="esp"><span class="lang-tag">ESP</span> Espanol</button>
-                        <button class="setting-pill" data-provider="fra"><span class="lang-tag">FRA</span> Francais</button>
-                    </div>
+            <div class="settings-layout-container">
+                <!-- Settings Left Category Tabs Sidebar -->
+                <div class="settings-nav-sidebar" id="settings-nav-sidebar">
+                    <button class="settings-nav-tab active" data-settings-tab="general">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                        <span>General & Language</span>
+                    </button>
+                    <button class="settings-nav-tab" data-settings-tab="appearance">
+                        <svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 18.23c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l.62-.62C7.93 20.26 9.88 21 12 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 16c-3.87 0-7-3.13-7-7 0-1.61.55-3.09 1.47-4.28l9.81 9.81C15.09 18.45 13.61 19 12 19zm5.53-2.72L7.72 6.47C8.91 5.55 10.39 5 12 5c3.87 0 7 3.13 7 7 0 1.61-.55 3.09-1.47 4.28z"/></svg>
+                        <span>Appearance & Themes</span>
+                    </button>
+                    <button class="settings-nav-tab" data-settings-tab="playback">
+                        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        <span>Playback</span>
+                    </button>
+                    <button class="settings-nav-tab" data-settings-tab="subtitles">
+                        <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-9 9H7v-2h4v2zm7 0h-5v-2h5v2zm-3-4H7V7h8v2zm5 0h-3V7h3v2z"/></svg>
+                        <span>Subtitles & Display</span>
+                    </button>
+                    <button class="settings-nav-tab" data-settings-tab="system">
+                        <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+                        <span>System & Updates</span>
+                    </button>
                 </div>
 
-                <!-- Category 2: Playback & Subtitles -->
-                <div class="setting-group" style="margin-top:24px;">
-                    <div class="setting-title-row">
-                        <label class="setting-label">Playback & Skip Duration</label>
-                        <span class="setting-hint">Seconds jumped when pressing Skip buttons or Left / Right on controller</span>
-                    </div>
-                    <div class="settings-provider-pills" id="settings-skip-pills">
-                        <button class="setting-pill active" data-skip="10">10 Seconds</button>
-                        <button class="setting-pill" data-skip="15">15 Seconds</button>
-                        <button class="setting-pill" data-skip="30">30 Seconds</button>
-                    </div>
-                </div>
+                <!-- Settings Right Content Panels -->
+                <div class="settings-content-pane" id="settings-content-pane">
+                    <!-- Tab Panel 1: General & Language -->
+                    <div class="settings-panel active" id="settings-panel-general">
+                        <div class="setting-group">
+                            <div class="setting-title-row">
+                                <label class="setting-label">Content Catalog & Language Provider</label>
+                                <span class="setting-hint">Determines feed language, poster metadata, and default audio stream</span>
+                            </div>
+                            <div class="settings-provider-pills" id="settings-provider-pills">
+                                <button class="setting-pill active" data-provider="eng"><span class="lang-tag">ENG</span> English</button>
+                                <button class="setting-pill" data-provider="ger"><span class="lang-tag">GER</span> Deutsch</button>
+                                <button class="setting-pill" data-provider="ita"><span class="lang-tag">ITA</span> Italiano</button>
+                                <button class="setting-pill" data-provider="esp"><span class="lang-tag">ESP</span> Español</button>
+                                <button class="setting-pill" data-provider="fra"><span class="lang-tag">FRA</span> Français</button>
+                            </div>
+                        </div>
 
-                <div class="setting-group" style="margin-top:24px;">
-                    <div class="setting-title-row">
-                        <label class="setting-label">Autoplay Next Episode</label>
-                        <span class="setting-hint">Automatically prompt and start next series episode</span>
+                        <div class="setting-group" style="margin-top:28px;">
+                            <div class="setting-title-row">
+                                <label class="setting-label">Local Data & Storage Management</label>
+                                <span class="setting-hint">Manage cached continue watching records, saved favorites, or factory reset</span>
+                            </div>
+                            <div class="settings-actions-row">
+                                <button id="btn-clear-history" class="btn-setting-action">Clear Continue Watching</button>
+                                <button id="btn-clear-favorites" class="btn-setting-action">Clear Favorites</button>
+                                <button id="btn-reset-settings" class="btn-setting-action btn-danger">Reset All Settings</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="settings-provider-pills" id="settings-autoplay-pills">
-                        <button class="setting-pill active" data-autoplay="on">Enabled</button>
-                        <button class="setting-pill" data-autoplay="off">Disabled</button>
-                    </div>
-                </div>
 
-                <!-- Category 3: Subtitles Font Size -->
-                <div class="setting-group" style="margin-top:24px;">
-                    <div class="setting-title-row">
-                        <label class="setting-label">Subtitle Display Size</label>
-                        <span class="setting-hint">Font size of on-screen closed captions & subtitles</span>
-                    </div>
-                    <div class="settings-provider-pills" id="settings-subsize-pills">
-                        <button class="setting-pill" data-subsize="normal">Normal (20px)</button>
-                        <button class="setting-pill active" data-subsize="large">Large (26px)</button>
-                        <button class="setting-pill" data-subsize="xlarge">Extra Large (32px)</button>
-                    </div>
-                </div>
+                    <!-- Tab Panel 2: Appearance & Themes -->
+                    <div class="settings-panel" id="settings-panel-appearance" style="display: none;">
+                        <div class="setting-group">
+                            <div class="setting-title-row">
+                                <label class="setting-label">Navigation Bar Layout</label>
+                                <span class="setting-hint">Switch between standard Netflix top navbar and Streamflix modern left sidebar</span>
+                            </div>
+                            <div class="settings-provider-pills" id="settings-layout-pills">
+                                <button class="setting-pill active" data-layout="top">
+                                    <svg viewBox="0 0 20 20" style="width:16px;height:16px;margin-right:6px;fill:currentColor;"><path d="M2 3h16v3H2zm0 5h16v9H2z"/></svg>
+                                    Top Navigation Bar
+                                </button>
+                                <button class="setting-pill" data-layout="sidebar">
+                                    <svg viewBox="0 0 20 20" style="width:16px;height:16px;margin-right:6px;fill:currentColor;"><path d="M2 3h4v14H2zm6 0h10v14H8z"/></svg>
+                                    Left Sidebar (Streamflix)
+                                </button>
+                            </div>
+                        </div>
 
-                <!-- Category 4: Data Management -->
-                <div class="setting-group" style="margin-top:28px;">
-                    <label class="setting-label">Data Management</label>
-                    <div style="display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;">
-                        <button id="btn-clear-history" class="btn-setting-action">Clear Continue Watching</button>
-                        <button id="btn-clear-favorites" class="btn-setting-action">Clear Favorites</button>
-                        <button id="btn-reset-settings" class="btn-setting-action" style="border-color:#555;color:#aaa;">Reset All Settings</button>
+                        <div class="setting-group" style="margin-top:28px;">
+                            <div class="setting-title-row">
+                                <label class="setting-label">Color Theme Accent</label>
+                                <span class="setting-hint">Personalize highlight colors across focus rings, badges, buttons, and progress meters</span>
+                            </div>
+                            <div class="settings-provider-pills" id="settings-theme-pills">
+                                <button class="setting-pill active theme-pill-red" data-theme="red">
+                                    <span class="theme-dot" style="background:#e50914;"></span>
+                                    Netflix Red
+                                </button>
+                                <button class="setting-pill theme-pill-cyan" data-theme="cyan">
+                                    <span class="theme-dot" style="background:#0070d1;"></span>
+                                    PlayStation Cyan
+                                </button>
+                                <button class="setting-pill theme-pill-purple" data-theme="purple">
+                                    <span class="theme-dot" style="background:#9333ea;"></span>
+                                    Amethyst Purple
+                                </button>
+                                <button class="setting-pill theme-pill-green" data-theme="green">
+                                    <span class="theme-dot" style="background:#059669;"></span>
+                                    Emerald Green
+                                </button>
+                                <button class="setting-pill theme-pill-gold" data-theme="gold">
+                                    <span class="theme-dot" style="background:#d97706;"></span>
+                                    Cyber Gold
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                </div>
 
-                <!-- Category 5: App Updates & GitHub Synchronization -->
-                <div class="setting-group" style="margin-top:28px;">
-                    <div class="setting-title-row">
-                        <label class="setting-label">App Updates & Version</label>
-                        <span class="setting-hint" id="settings-version-hint">PStream PS5 Standalone v1.0.0 (Zero PC Required)</span>
+                    <!-- Tab Panel 3: Playback -->
+                    <div class="settings-panel" id="settings-panel-playback" style="display: none;">
+                        <div class="setting-group">
+                            <div class="setting-title-row">
+                                <label class="setting-label">Controller Seek / Skip Duration</label>
+                                <span class="setting-hint">Time jumped when pressing Skip buttons or D-Pad Left / Right during media playback</span>
+                            </div>
+                            <div class="settings-provider-pills" id="settings-skip-pills">
+                                <button class="setting-pill active" data-skip="10">10 Seconds</button>
+                                <button class="setting-pill" data-skip="15">15 Seconds</button>
+                                <button class="setting-pill" data-skip="30">30 Seconds</button>
+                            </div>
+                        </div>
+
+                        <div class="setting-group" style="margin-top:28px;">
+                            <div class="setting-title-row">
+                                <label class="setting-label">Autoplay Next Episode</label>
+                                <span class="setting-hint">Show interactive end-card prompt to immediately queue up the next series episode</span>
+                            </div>
+                            <div class="settings-provider-pills" id="settings-autoplay-pills">
+                                <button class="setting-pill active" data-autoplay="on">Enabled</button>
+                                <button class="setting-pill" data-autoplay="off">Disabled</button>
+                            </div>
+                        </div>
                     </div>
-                    <div style="display:flex;gap:14px;margin-top:10px;align-items:center;flex-wrap:wrap;">
-                        <button id="btn-check-update" class="btn-setting-action" style="border-color:#e50914;color:#fff;background:rgba(229,9,20,0.15);">Check for Updates</button>
-                        <span id="update-status-text" style="font-size:14px;color:#aaa;"></span>
+
+                    <!-- Tab Panel 4: Subtitles & Display -->
+                    <div class="settings-panel" id="settings-panel-subtitles" style="display: none;">
+                        <div class="setting-group">
+                            <div class="setting-title-row">
+                                <label class="setting-label">Subtitle & Caption Font Size</label>
+                                <span class="setting-hint">Select optimal closed-caption size calibrated for 10-foot living room viewing</span>
+                            </div>
+                            <div class="settings-provider-pills" id="settings-subsize-pills">
+                                <button class="setting-pill" data-subsize="normal">Normal (20px)</button>
+                                <button class="setting-pill active" data-subsize="large">Large (26px)</button>
+                                <button class="setting-pill" data-subsize="xlarge">Extra Large (32px)</button>
+                            </div>
+                        </div>
+                        <div class="setting-preview-box" style="margin-top:24px;padding:24px;background:#141414;border:1px solid #282828;border-radius:10px;">
+                            <span style="font-size:12px;font-weight:700;color:#777;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:12px;">Live Subtitle Preview</span>
+                            <div style="background:#000;border-radius:8px;padding:20px;text-align:center;">
+                                <span id="subtitle-preview-text" style="background:rgba(0,0,0,0.8);color:#fff;font-weight:700;padding:4px 10px;border-radius:4px;font-size:26px;">Here is how subtitles will look on your TV display</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab Panel 5: System & Updates -->
+                    <div class="settings-panel" id="settings-panel-system" style="display: none;">
+                        <div class="setting-group">
+                            <div class="setting-title-row">
+                                <label class="setting-label">PStream Core System & Architecture</label>
+                                <span class="setting-hint">Running as native PlayStation 5 Media Daemon with BigApp container integration</span>
+                            </div>
+                            <div class="system-status-grid">
+                                <div class="system-status-card">
+                                    <span class="system-card-title">Installed Version</span>
+                                    <span class="system-card-val" id="sys-installed-ver">v1.0.1</span>
+                                    <span class="system-card-sub">PS5 Standalone (Zero PC)</span>
+                                </div>
+                                <div class="system-status-card">
+                                    <span class="system-card-title">Daemon Endpoint</span>
+                                    <span class="system-card-val">http://127.0.0.1:8086</span>
+                                    <span class="system-card-sub">Local Media App Server</span>
+                                </div>
+                                <div class="system-status-card">
+                                    <span class="system-card-title">Application ID</span>
+                                    <span class="system-card-val">PSTR00001</span>
+                                    <span class="system-card-sub">Media Category: 66048</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="setting-group" style="margin-top:28px;">
+                            <div class="setting-title-row">
+                                <label class="setting-label">GitHub Auto-Update Synchronization</label>
+                                <span class="setting-hint" id="settings-version-hint">PStream PS5 Standalone v1.0.1 (Zero PC Required)</span>
+                            </div>
+                            <div style="display:flex;gap:16px;margin-top:10px;align-items:center;flex-wrap:wrap;">
+                                <button id="btn-check-update" class="btn-setting-action" style="border-color:var(--red-pstream);color:#fff;background:rgba(229,9,20,0.18);">
+                                    <svg viewBox="0 0 24 24" style="width:16px;height:16px;margin-right:6px;fill:currentColor;vertical-align:text-bottom;"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                                    Check for Updates
+                                </button>
+                                <span id="update-status-text" style="font-size:14px;color:#aaa;font-weight:600;"></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

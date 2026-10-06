@@ -91,7 +91,21 @@ var Input = (function () {
                     return;
                 }
                 // 2. Cursor navigation inside input: allow ArrowLeft & ArrowRight
-                if (raw === 37 || raw === 39 || keyStr === "ArrowLeft" || keyStr === "ArrowRight") {
+                if (raw === 37 || keyStr === "ArrowLeft") {
+                    var cursorAtStart = false;
+                    try {
+                        cursorAtStart = (!activeEl.value || activeEl.selectionStart === 0);
+                    } catch (err) { }
+                    if (cursorAtStart) {
+                        activeEl.blur();
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dispatch(KEY.LEFT);
+                        return;
+                    }
+                    return;
+                }
+                if (raw === 39 || keyStr === "ArrowRight") {
                     return;
                 }
                 // 3. Enter key: commits search, closes OSK so results can be browsed
@@ -104,11 +118,12 @@ var Input = (function () {
                     }
                     return;
                 }
-                // 4. Circle / Escape key: dismisses OSK
+                // 4. Circle / Escape key: dismisses OSK and navigates back
                 if (raw === 27 || keyStr === "Escape") {
                     activeEl.blur();
                     e.preventDefault();
                     e.stopPropagation();
+                    dispatch(KEY.CIRCLE);
                     return;
                 }
                 // 5. D-pad Down: exits search input into search results
@@ -204,8 +219,34 @@ var Input = (function () {
             var activeEl = document.activeElement;
             var isInputActive = !!(activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.id === "search-input"));
             if (isInputActive) {
-                // DualSense is currently operating the PS5 system On-Screen Keyboard.
-                // Do not fire background gamepad navigation events while typing in OSK!
+                // If user presses Circle, D-pad Down, or D-pad Left (when at start), dismiss OSK and navigate
+                var activeGamepads = getGamepadsList();
+                for (var gi = 0; gi < activeGamepads.length; gi++) {
+                    var agp = activeGamepads[gi];
+                    if (!agp || !agp.buttons) continue;
+                    // Circle (Button 1) dismisses OSK
+                    if (isButtonPressed(agp.buttons[1])) {
+                        activeEl.blur();
+                        dispatch(KEY.CIRCLE);
+                        break;
+                    }
+                    // D-Pad Down (Button 13) exits into results / tabs
+                    if (isButtonPressed(agp.buttons[13])) {
+                        activeEl.blur();
+                        dispatch(KEY.DOWN);
+                        break;
+                    }
+                    // D-Pad Left (Button 14) exits left into tabs if cursor is at beginning
+                    if (isButtonPressed(agp.buttons[14])) {
+                        var atStart = false;
+                        try { atStart = (!activeEl.value || activeEl.selectionStart === 0); } catch (e) { }
+                        if (atStart) {
+                            activeEl.blur();
+                            dispatch(KEY.LEFT);
+                            break;
+                        }
+                    }
+                }
                 requestAnimationFrame(poll);
                 return;
             }

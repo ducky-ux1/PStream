@@ -19,6 +19,8 @@ var App = (function () {
     var SKIP_KEY = "pstream_skip";
     var AUTOPLAY_KEY = "pstream_autoplay";
     var SUBSIZE_KEY = "pstream_subsize";
+    var THEME_KEY = "pstream_theme";
+    var LAYOUT_KEY = "pstream_layout";
     var PLACEHOLDER_POSTER = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 750'%3E%3Crect width='500' height='750' fill='%23181818'/%3E%3Cpath d='M210 320h80v110h-80z' fill='%23282828'/%3E%3Ctext x='250' y='410' fill='%23555' font-size='32' font-family='sans-serif' text-anchor='middle' font-weight='800'%3EPStream%3C/text%3E%3C/svg%3E";
 
     var state = {
@@ -28,6 +30,9 @@ var App = (function () {
         skipStep: 10,
         autoplay: true,
         subSize: "large",
+        theme: "red",
+        layout: "top",
+        settingsTab: "general",
         currentItem: null,
         currentDetails: null,
         currentSeason: 1,
@@ -52,6 +57,7 @@ var App = (function () {
         cardIndex: 0,
         billboardBtnIndex: 0,
         tabIndex: 0,
+        settingsTier: "tabs",
         focusedElement: null
     };
 
@@ -397,6 +403,12 @@ var App = (function () {
         state.subSize = (savedSubSize === "normal" || savedSubSize === "large" || savedSubSize === "xlarge") ? savedSubSize : "large";
         updateSubtitleStyle();
         updateSeekButtonLabels();
+
+        var savedTheme = localStorage.getItem(THEME_KEY);
+        setTheme(savedTheme || "red");
+
+        var savedLayout = localStorage.getItem(LAYOUT_KEY);
+        setLayoutMode(savedLayout || "top");
 
         // Load Persistence
         state.continueList = loadContinueWatching();
@@ -1254,7 +1266,57 @@ var App = (function () {
         localStorage.setItem(SUBSIZE_KEY, size);
         updateSettingsPills();
         updateSubtitleStyle();
+        updateSubtitlePreview();
         log("Subtitle size set to: " + size);
+    }
+
+    function setTheme(themeName) {
+        state.theme = themeName || "red";
+        localStorage.setItem(THEME_KEY, state.theme);
+        document.body.dataset.theme = state.theme;
+        updateSettingsPills();
+        log("Color theme accent set to: " + state.theme);
+    }
+
+    function setLayoutMode(layoutMode) {
+        state.layout = layoutMode || "top";
+        localStorage.setItem(LAYOUT_KEY, state.layout);
+        document.body.classList.toggle("layout-sidebar", state.layout === "sidebar");
+        updateSettingsPills();
+        log("Navigation layout mode set to: " + state.layout);
+    }
+
+    function switchSettingsTab(tabName) {
+        state.settingsTab = tabName || "general";
+        // Update sidebar tabs active state
+        document.querySelectorAll("#settings-nav-sidebar .settings-nav-tab").forEach(function (tab) {
+            if (tab.dataset.settingsTab === state.settingsTab) {
+                tab.classList.add("active");
+            } else {
+                tab.classList.remove("active");
+            }
+        });
+        // Show corresponding content panel
+        document.querySelectorAll("#settings-content-pane .settings-panel").forEach(function (panel) {
+            panel.style.display = "none";
+            panel.classList.remove("active");
+        });
+        var activePanel = document.getElementById("settings-panel-" + state.settingsTab);
+        if (activePanel) {
+            activePanel.style.display = "block";
+            activePanel.classList.add("active");
+        }
+        if (state.settingsTab === "subtitles") {
+            updateSubtitlePreview();
+        }
+    }
+
+    function updateSubtitlePreview() {
+        var prevText = document.getElementById("subtitle-preview-text");
+        if (prevText) {
+            var sizeMap = { "normal": "20px", "large": "26px", "xlarge": "32px" };
+            prevText.style.fontSize = sizeMap[state.subSize] || "26px";
+        }
     }
 
     function updateSubtitleStyle() {
@@ -1286,11 +1348,16 @@ var App = (function () {
         localStorage.removeItem(SKIP_KEY);
         localStorage.removeItem(AUTOPLAY_KEY);
         localStorage.removeItem(SUBSIZE_KEY);
+        localStorage.removeItem(THEME_KEY);
+        localStorage.removeItem(LAYOUT_KEY);
         state.activeProvider = "eng";
         state.skipStep = 10;
         state.autoplay = true;
         state.subSize = "large";
+        setTheme("red");
+        setLayoutMode("top");
         updateSubtitleStyle();
+        updateSubtitlePreview();
         updateSeekButtonLabels();
         updateSettingsPills();
         loadTabFeed(state.currentTab || "home");
@@ -1302,9 +1369,11 @@ var App = (function () {
         if (!modal) return;
         modal.style.display = "flex";
         state.view = "settings_modal";
+        nav.settingsTier = "tabs";
         updateSettingsPills();
-        var firstPill = modal.querySelector(".setting-pill.active") || modal.querySelector(".setting-pill");
-        if (firstPill) setFocus(firstPill);
+        switchSettingsTab("general");
+        var firstTab = document.querySelector("#settings-nav-sidebar .settings-nav-tab");
+        if (firstTab) setFocus(firstTab);
     }
 
     function closeSettingsModal() {
@@ -1348,6 +1417,24 @@ var App = (function () {
         // Subtitle size pills
         document.querySelectorAll("#settings-subsize-pills .setting-pill").forEach(function (pill) {
             if (pill.dataset.subsize === state.subSize) {
+                pill.classList.add("active");
+            } else {
+                pill.classList.remove("active");
+            }
+        });
+
+        // Layout pills
+        document.querySelectorAll("#settings-layout-pills .setting-pill").forEach(function (pill) {
+            if (pill.dataset.layout === state.layout) {
+                pill.classList.add("active");
+            } else {
+                pill.classList.remove("active");
+            }
+        });
+
+        // Theme pills
+        document.querySelectorAll("#settings-theme-pills .setting-pill").forEach(function (pill) {
+            if (pill.dataset.theme === state.theme) {
                 pill.classList.add("active");
             } else {
                 pill.classList.remove("active");
@@ -2084,9 +2171,27 @@ var App = (function () {
         var settingsClose = document.getElementById("settings-close-btn");
         if (settingsClose) settingsClose.onclick = closeSettingsModal;
 
+        document.querySelectorAll("#settings-nav-sidebar .settings-nav-tab").forEach(function (tab) {
+            tab.onclick = function () {
+                switchSettingsTab(tab.dataset.settingsTab);
+            };
+        });
+
         document.querySelectorAll("#settings-provider-pills .setting-pill").forEach(function (pill) {
             pill.onclick = function () {
                 selectProvider(pill.dataset.provider);
+            };
+        });
+
+        document.querySelectorAll("#settings-layout-pills .setting-pill").forEach(function (pill) {
+            pill.onclick = function () {
+                setLayoutMode(pill.dataset.layout);
+            };
+        });
+
+        document.querySelectorAll("#settings-theme-pills .setting-pill").forEach(function (pill) {
+            pill.onclick = function () {
+                setTheme(pill.dataset.theme);
             };
         });
 
@@ -2743,6 +2848,17 @@ var App = (function () {
 
         // 5. Cross (X) -> Select / Activate
         if (code === KEY.CROSS) {
+            if (nav.tier === "search") {
+                var sInCross = document.getElementById("search-input");
+                if (sInCross) {
+                    sInCross.focus();
+                    if (sInCross.value.length > 0) {
+                        try { sInCross.select(); } catch (e) { }
+                    }
+                }
+                return;
+            }
+
             if (state.view === "player") {
                 var overlayEl = document.getElementById("player-overlay");
                 if (overlayEl && overlayEl.classList.contains("osd-hidden")) {
@@ -2779,8 +2895,10 @@ var App = (function () {
             navigateDrawerEpisodes(code, KEY);
         } else if (state.view === "drawer_audio") {
             navigateDrawerAudio(code, KEY);
-        } else if (state.view === "provider_modal" || state.view === "settings_modal") {
+        } else if (state.view === "provider_modal") {
             navigateModalGeneric(code, KEY);
+        } else if (state.view === "settings_modal") {
+            navigateSettingsModal(code, KEY);
         }
     }
 
@@ -2818,15 +2936,16 @@ var App = (function () {
                 nav.tier = "tabs";
                 if (tabs[nav.tabIndex]) setFocus(tabs[nav.tabIndex]);
             } else if (nav.tier === "tabs") {
-                // Navigate UP from tabs into search input
-                nav.tier = "search";
-                var sInput = document.getElementById("search-input");
-                if (sInput) {
-                    setFocus(sInput);
-                    sInput.focus();
-                    if (sInput.value.length > 0) {
-                        try { sInput.select(); } catch (e) { }
+                if (state.layout === "sidebar") {
+                    if (nav.tabIndex > 0) {
+                        nav.tabIndex--;
+                        setFocus(tabs[nav.tabIndex]);
                     }
+                } else {
+                    // Navigate UP from tabs into search input (visual focus only)
+                    nav.tier = "search";
+                    var sInput = document.getElementById("search-input");
+                    if (sInput) setFocus(sInput);
                 }
             }
         } else if (dir === "DOWN") {
@@ -2845,7 +2964,19 @@ var App = (function () {
                     if (tabs[nav.tabIndex]) setFocus(tabs[nav.tabIndex]);
                 }
             } else if (nav.tier === "tabs") {
-                focusBillboardPlay();
+                if (state.layout === "sidebar") {
+                    if (nav.tabIndex < tabs.length - 1) {
+                        nav.tabIndex++;
+                        setFocus(tabs[nav.tabIndex]);
+                    } else {
+                        // In sidebar, move down from last tab to search bar
+                        nav.tier = "search";
+                        var sInSide = document.getElementById("search-input");
+                        if (sInSide) setFocus(sInSide);
+                    }
+                } else {
+                    focusBillboardPlay();
+                }
             } else if (nav.tier === "billboard") {
                 var contSecDown = document.getElementById("continue-watching-section");
                 if (contSecDown && contSecDown.style.display !== "none") {
@@ -2873,17 +3004,22 @@ var App = (function () {
                 var inEl = document.getElementById("search-input");
                 if (inEl) inEl.blur();
                 nav.tier = "tabs";
-                nav.tabIndex = tabs.length - 1;
+                nav.tabIndex = tabs.length - 1; // Navigates back to Settings tab!
                 if (tabs[nav.tabIndex]) setFocus(tabs[nav.tabIndex]);
             } else if (nav.tier === "tabs") {
-                if (nav.tabIndex > 0) {
-                    nav.tabIndex--;
-                    setFocus(tabs[nav.tabIndex]);
+                if (state.layout !== "sidebar") {
+                    if (nav.tabIndex > 0) {
+                        nav.tabIndex--;
+                        setFocus(tabs[nav.tabIndex]);
+                    }
                 }
             } else if (nav.tier === "billboard") {
                 if (nav.billboardBtnIndex > 0) {
                     nav.billboardBtnIndex--;
                     setFocus(document.getElementById("billboard-play-btn"));
+                } else if (state.layout === "sidebar") {
+                    nav.tier = "tabs";
+                    if (tabs[nav.tabIndex]) setFocus(tabs[nav.tabIndex]);
                 }
             } else if (nav.tier === "shelves" || nav.tier === "continue") {
                 var currentShelfL = (nav.tier === "continue") ? document.getElementById("continue-watching-section") : shelves[nav.shelfIndex];
@@ -2892,24 +3028,25 @@ var App = (function () {
                     if (nav.cardIndex > 0) {
                         nav.cardIndex--;
                         setFocus(cardsL[nav.cardIndex]);
+                    } else if (state.layout === "sidebar") {
+                        nav.tier = "tabs";
+                        if (tabs[nav.tabIndex]) setFocus(tabs[nav.tabIndex]);
                     }
                 }
             }
         } else if (dir === "RIGHT") {
             if (nav.tier === "tabs") {
-                if (nav.tabIndex < tabs.length - 1) {
-                    nav.tabIndex++;
-                    setFocus(tabs[nav.tabIndex]);
+                if (state.layout === "sidebar") {
+                    focusBillboardPlay();
                 } else {
-                    // Navigate RIGHT past tabs into search input
-                    nav.tier = "search";
-                    var sIn = document.getElementById("search-input");
-                    if (sIn) {
-                        setFocus(sIn);
-                        sIn.focus();
-                        if (sIn.value.length > 0) {
-                            try { sIn.select(); } catch (e) { }
-                        }
+                    if (nav.tabIndex < tabs.length - 1) {
+                        nav.tabIndex++;
+                        setFocus(tabs[nav.tabIndex]);
+                    } else {
+                        // Navigate RIGHT past tabs into search input (visual highlight without stealing typing focus)
+                        nav.tier = "search";
+                        var sIn = document.getElementById("search-input");
+                        if (sIn) setFocus(sIn);
                     }
                 }
             } else if (nav.tier === "billboard") {
@@ -3237,6 +3374,126 @@ var App = (function () {
             setFocus(btns[(curr + 1) % btns.length]);
         } else if (code === KEY.UP || code === KEY.LEFT) {
             setFocus(btns[(curr - 1 + btns.length) % btns.length]);
+        }
+    }
+
+    function navigateSettingsModal(code, KEY) {
+        var sidebarTabs = Array.from(document.querySelectorAll("#settings-nav-sidebar .settings-nav-tab"));
+        var activePanel = document.getElementById("settings-panel-" + (state.settingsTab || "general"));
+        if (!activePanel) return;
+
+        // Group interactive buttons in the active panel by their row container
+        var rowContainers = Array.from(activePanel.querySelectorAll(".settings-provider-pills, .settings-actions-row, .setting-actions-row, div"));
+        var contentRows = [];
+        rowContainers.forEach(function (rc) {
+            var btns = Array.from(rc.querySelectorAll("button:not([disabled])")).filter(function (b) {
+                return b.style.display !== "none" && b.offsetParent !== null && !b.closest("#settings-nav-sidebar");
+            });
+            if (btns.length > 0) {
+                var alreadyHave = contentRows.some(function (r) {
+                    return r.length === btns.length && r[0] === btns[0];
+                });
+                if (!alreadyHave) {
+                    contentRows.push(btns);
+                }
+            }
+        });
+
+        if (contentRows.length > 1) {
+            var uniqueRows = [];
+            var seenFirst = [];
+            contentRows.forEach(function (r) {
+                if (seenFirst.indexOf(r[0]) === -1) {
+                    seenFirst.push(r[0]);
+                    uniqueRows.push(r);
+                }
+            });
+            contentRows = uniqueRows;
+        }
+
+        // Determine if focus is currently in the left tab sidebar
+        var currentTabIdx = sidebarTabs.indexOf(nav.focusedElement);
+        var inTabs = (currentTabIdx !== -1) || (nav.settingsTier === "tabs");
+
+        if (inTabs) {
+            if (currentTabIdx === -1) {
+                currentTabIdx = sidebarTabs.findIndex(function (t) {
+                    return t.dataset.settingsTab === state.settingsTab;
+                });
+                if (currentTabIdx === -1) currentTabIdx = 0;
+            }
+
+            if (code === KEY.DOWN) {
+                var nextTab = Math.min(sidebarTabs.length - 1, currentTabIdx + 1);
+                setFocus(sidebarTabs[nextTab]);
+                switchSettingsTab(sidebarTabs[nextTab].dataset.settingsTab);
+            } else if (code === KEY.UP) {
+                var prevTab = Math.max(0, currentTabIdx - 1);
+                setFocus(sidebarTabs[prevTab]);
+                switchSettingsTab(sidebarTabs[prevTab].dataset.settingsTab);
+            } else if (code === KEY.RIGHT || code === KEY.CROSS) {
+                if (contentRows.length > 0 && contentRows[0].length > 0) {
+                    nav.settingsTier = "content";
+                    var activePill = contentRows[0].find(function (b) {
+                        return b.classList.contains("active");
+                    }) || contentRows[0][0];
+                    setFocus(activePill);
+                }
+            } else if (code === KEY.CIRCLE) {
+                closeSettingsModal();
+            }
+        } else {
+            // Focus is in the right content pane
+            var currRow = -1;
+            var currCol = -1;
+            for (var r = 0; r < contentRows.length; r++) {
+                var c = contentRows[r].indexOf(nav.focusedElement);
+                if (c !== -1) {
+                    currRow = r;
+                    currCol = c;
+                    break;
+                }
+            }
+
+            if (currRow === -1) {
+                currRow = 0;
+                currCol = 0;
+            }
+
+            if (code === KEY.DOWN) {
+                if (currRow < contentRows.length - 1) {
+                    var nextR = currRow + 1;
+                    var targetCol = Math.min(currCol, contentRows[nextR].length - 1);
+                    setFocus(contentRows[nextR][targetCol]);
+                }
+            } else if (code === KEY.UP) {
+                if (currRow > 0) {
+                    var prevR = currRow - 1;
+                    var prevTargetCol = Math.min(currCol, contentRows[prevR].length - 1);
+                    setFocus(contentRows[prevR][prevTargetCol]);
+                }
+            } else if (code === KEY.RIGHT) {
+                if (currCol < contentRows[currRow].length - 1) {
+                    setFocus(contentRows[currRow][currCol + 1]);
+                }
+            } else if (code === KEY.LEFT) {
+                if (currCol > 0) {
+                    setFocus(contentRows[currRow][currCol - 1]);
+                } else {
+                    // Leftmost item in row: return focus to active category tab on the left
+                    nav.settingsTier = "tabs";
+                    var activeTabBtn = sidebarTabs.find(function (t) {
+                        return t.dataset.settingsTab === state.settingsTab;
+                    }) || sidebarTabs[0];
+                    if (activeTabBtn) setFocus(activeTabBtn);
+                }
+            } else if (code === KEY.CROSS) {
+                if (nav.focusedElement) {
+                    nav.focusedElement.click();
+                }
+            } else if (code === KEY.CIRCLE) {
+                closeSettingsModal();
+            }
         }
     }
 

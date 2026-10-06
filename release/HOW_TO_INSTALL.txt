@@ -1,0 +1,44 @@
+================================================================================
+                    PStream for PlayStation 5 (v1.0.1)
+                Quick Installation & Auto-Update Guide
+================================================================================
+
+COMPATIBILITY:
+- PlayStation 5 (Firmware 3.00 - 13.60+)
+- Jailbreak / Exploit Environment with Payload Port 9021 or Payload Manager
+
+--------------------------------------------------------------------------------
+OPTION 1: PS5 PAYLOAD MANAGER (Zero PC Required)
+--------------------------------------------------------------------------------
+1. Copy 'PStream-PayloadManager.elf' to your PS5:
+   - USB: Place on root of a FAT32 or exFAT USB flash drive and plug into PS5.
+   - Or FTP: Upload to '/data/pldmgr/payloads/PStream-PayloadManager.elf'.
+2. Open Payload Manager on your PS5 TV menu.
+3. Select 'PStream-PayloadManager.elf' and press Cross (X).
+4. The installer automatically:
+   - Creates the BigApp native media container.
+   - Registers 'PSTR00001' on the PS5 Media home screen tab.
+   - Adds the background daemon to '/data/pldmgr/autoload.txt'.
+   - Starts the local media daemon on port 8086.
+5. Return to the PS5 home screen -> Media tab -> Launch PStream!
+
+--------------------------------------------------------------------------------
+OPTION 2: PS5Upload / Remote Payload Sender (Port 9021)
+--------------------------------------------------------------------------------
+1. Ensure your PS5 exploit is running with payload listener active on port 9021.
+2. Note your PS5 IP address (Settings -> Network -> Connection Status).
+3. Open PS5Upload (or any ELF sender like Netcat GUI):
+   - IP: [Your PS5 IP]
+   - Port: 9021
+   - Payload: Select 'PStream-PS5Upload.elf'
+   - Click Send / Upload.
+4. The app installs immediately and launches the daemon!
+
+--------------------------------------------------------------------------------
+IN-APP AUTO-UPDATES (From the Couch):
+--------------------------------------------------------------------------------
+Once installed, you do not need to resend payloads to get updates!
+1. In PStream on your PS5, go to Settings -> System & Updates.
+2. Click 'Check for Updates' (or accept the on-screen update toast).
+3. PStream downloads updated files directly from GitHub over Wi-Fi and reloads!
+================================================================================
