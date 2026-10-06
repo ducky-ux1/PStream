@@ -1,0 +1,9 @@
+{
+  "version": "1.0.0",
+  "name": "PStream PS5 Standalone",
+  "release_date": "2026-10-06",
+  "min_firmware": "3.00",
+  "max_firmware": "5.50",
+  "repository": "https://github.com/ducky-ux1/PStream",
+  "changelog": "Initial Standalone Release: 100% native BigApp Media Container, local C daemon on port 8086, 60fps follow-focus modal scrolling, horizontal season carousel, zero PC required."
+}

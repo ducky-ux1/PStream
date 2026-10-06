@@ -252,6 +252,17 @@ var Input = (function () {
                     checkAxisRepeat(padIdx + "_stick_y_neg", y < -thresh, KEY.UP, now);
                     checkAxisRepeat(padIdx + "_stick_y_pos", y > thresh, KEY.DOWN, now);
                 }
+
+                // Right Analog Stick Modal Free Scrolling
+                if (gp.axes && gp.axes.length >= 4) {
+                    var ry = gp.axes[3];
+                    if (Math.abs(ry) > 0.18) {
+                        var modal = document.getElementById("detail-modal");
+                        if (modal && modal.style.display !== "none" && modal.style.display !== "") {
+                            modal.scrollTop += ry * 16;
+                        }
+                    }
+                }
             }
             requestAnimationFrame(poll);
         }

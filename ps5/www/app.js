@@ -19,6 +19,7 @@ var App = (function () {
     var SKIP_KEY = "pstream_skip";
     var AUTOPLAY_KEY = "pstream_autoplay";
     var SUBSIZE_KEY = "pstream_subsize";
+    var PLACEHOLDER_POSTER = "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 750'%3E%3Crect width='500' height='750' fill='%23181818'/%3E%3Cpath d='M210 320h80v110h-80z' fill='%23282828'/%3E%3Ctext x='250' y='410' fill='%23555' font-size='32' font-family='sans-serif' text-anchor='middle' font-weight='800'%3EPStream%3C/text%3E%3C/svg%3E";
 
     var state = {
         view: "browse", // "browse" | "detail" | "player" | "context" | "drawer_episodes" | "drawer_audio" | "provider_modal" | "settings_modal"
@@ -80,6 +81,296 @@ var App = (function () {
     var hlsInstance = null;
     var lastProgressSaveTime = 0;
 
+    // ==========================================
+    // Standalone TMDb Engine (Zero-Server Architecture)
+    // ==========================================
+    var TMDb = (function () {
+        var API_KEY = "adc5047f27e588c9347087931a696cf4";
+        var BASE = "https://api.themoviedb.org/3";
+        var LANG_MAP = { "eng": "en-US", "ita": "it-IT", "ger": "de-DE", "esp": "es-ES", "fra": "fr-FR" };
+
+        function getLang(p) { return LANG_MAP[p] || "en-US"; }
+
+        function get(path, params, lang) {
+            var url = BASE + path + "?api_key=" + API_KEY + "&language=" + getLang(lang);
+            if (params) {
+                for (var k in params) {
+                    if (params.hasOwnProperty(k)) {
+                        url += "&" + encodeURIComponent(k) + "=" + encodeURIComponent(params[k]);
+                    }
+                }
+            }
+            return fetch(url).then(function (r) {
+                if (!r.ok) throw new Error("TMDb error " + r.status);
+                return r.json();
+            });
+        }
+
+        function formatItem(it, defType) {
+            var mtype = it.media_type || defType || "movie";
+            var title = it.title || it.name || it.original_title || "Unknown";
+            var date = it.release_date || it.first_air_date || "";
+            var year = date ? date.substring(0, 4) : "";
+            var poster = it.poster_path ? ("https://image.tmdb.org/t/p/w500" + it.poster_path) : "";
+            var backdrop = it.backdrop_path ? ("https://image.tmdb.org/t/p/w1280" + it.backdrop_path) : "";
+            var rating = it.vote_average ? Math.round(it.vote_average * 10) / 10 : 8.0;
+            var matchPct = Math.min(99, Math.max(75, Math.round(rating * 10 + 15)));
+            return {
+                id: String(it.id),
+                title: title,
+                type: mtype,
+                year: year,
+                overview: it.overview || "",
+                rating: String(rating),
+                match: matchPct + "% Match",
+                poster: poster,
+                backdrop: backdrop
+            };
+        }
+
+        return {
+            getFeed: function (tab, lang) {
+                var l = getLang(lang);
+                if (tab === "movies") {
+                    return Promise.all([
+                        get("/trending/movie/week", null, l),
+                        get("/movie/popular", null, l),
+                        get("/movie/top_rated", null, l),
+                        get("/discover/movie", { with_genres: "28", sort_by: "popularity.desc" }, l),
+                        get("/discover/movie", { with_genres: "878", sort_by: "popularity.desc" }, l),
+                        get("/discover/movie", { with_genres: "27", sort_by: "popularity.desc" }, l),
+                        get("/discover/movie", { with_genres: "35", sort_by: "popularity.desc" }, l)
+                    ]).then(function (res) {
+                        var trend = (res[0].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        var pop = (res[1].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        var top = (res[2].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        var act = (res[3].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        var scifi = (res[4].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        var horror = (res[5].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        var comedy = (res[6].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        return {
+                            tab: "movies",
+                            featured: trend[0] || null,
+                            categories: [
+                                { title: "Top 10 Movies Today", isTop10: true, items: trend.slice(0, 10) },
+                                { title: "Popular on PStream", items: pop },
+                                { title: "Critically Acclaimed Films", items: top },
+                                { title: "Action & Adrenaline", items: act },
+                                { title: "Sci-Fi & Cyberpunk", items: scifi },
+                                { title: "Chilling Horror & Thrillers", items: horror },
+                                { title: "Laugh-Out-Loud Comedies", items: comedy }
+                            ]
+                        };
+                    });
+                } else if (tab === "tv") {
+                    return Promise.all([
+                        get("/trending/tv/week", null, l),
+                        get("/tv/popular", null, l),
+                        get("/tv/top_rated", null, l),
+                        get("/discover/tv", { with_genres: "18", sort_by: "popularity.desc" }, l),
+                        get("/discover/tv", { with_genres: "10765", sort_by: "popularity.desc" }, l),
+                        get("/discover/tv", { with_genres: "35", sort_by: "popularity.desc" }, l)
+                    ]).then(function (res) {
+                        var trend = (res[0].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        var pop = (res[1].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        var top = (res[2].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        var drama = (res[3].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        var scifi = (res[4].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        var comedy = (res[5].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        return {
+                            tab: "tv",
+                            featured: trend[0] || null,
+                            categories: [
+                                { title: "Top 10 Series Today", isTop10: true, items: trend.slice(0, 10) },
+                                { title: "Binge-Worthy TV Shows", items: pop },
+                                { title: "Highest Rated TV Dramas", items: top },
+                                { title: "Gripping Dramas", items: drama },
+                                { title: "Sci-Fi & Fantasy Series", items: scifi },
+                                { title: "TV Comedies", items: comedy }
+                            ]
+                        };
+                    });
+                } else if (tab === "anime") {
+                    return Promise.all([
+                        get("/discover/tv", { with_genres: "16", with_original_language: "ja", sort_by: "popularity.desc" }, l),
+                        get("/discover/tv", { with_genres: "16", with_original_language: "ja", sort_by: "vote_average.desc", "vote_count.gte": "100" }, l),
+                        get("/discover/movie", { with_genres: "16", with_original_language: "ja", sort_by: "popularity.desc" }, l),
+                        get("/discover/tv", { with_genres: "16,10759", with_original_language: "ja", sort_by: "popularity.desc" }, l)
+                    ]).then(function (res) {
+                        var trend = (res[0].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        var top = (res[1].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        var movies = (res[2].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        var action = (res[3].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        return {
+                            tab: "anime",
+                            featured: trend[0] || null,
+                            categories: [
+                                { title: "Top 10 Anime Today", isTop10: true, items: trend.slice(0, 10) },
+                                { title: "Critically Acclaimed Anime", items: top },
+                                { title: "Feature Anime Films", items: movies },
+                                { title: "Shonen & Action Anime", items: action }
+                            ]
+                        };
+                    });
+                } else {
+                    return Promise.all([
+                        get("/trending/all/week", null, l),
+                        get("/movie/popular", null, l),
+                        get("/tv/popular", null, l),
+                        get("/movie/top_rated", null, l),
+                        get("/tv/top_rated", null, l),
+                        get("/discover/movie", { with_genres: "28", sort_by: "popularity.desc" }, l),
+                        get("/discover/tv", { with_genres: "16", with_original_language: "ja", sort_by: "popularity.desc" }, l),
+                        get("/discover/movie", { with_genres: "878", sort_by: "popularity.desc" }, l)
+                    ]).then(function (res) {
+                        var trend = (res[0].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x); });
+                        var popM = (res[1].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        var popTv = (res[2].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        var topM = (res[3].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        var topTv = (res[4].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        var act = (res[5].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        var anime = (res[6].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
+                        var scifi = (res[7].results || []).filter(function (x) { return !!x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
+                        return {
+                            tab: "home",
+                            featured: trend[0] || null,
+                            categories: [
+                                { title: "Top 10 Today", isTop10: true, items: trend.slice(0, 10) },
+                                { title: "Blockbuster Movies", items: popM },
+                                { title: "Hit TV Series", items: popTv },
+                                { title: "Critically Acclaimed Movies", items: topM },
+                                { title: "Award-Winning TV Dramas", items: topTv },
+                                { title: "Action & Adventure", items: act },
+                                { title: "Japanese Anime & Animation", items: anime },
+                                { title: "Sci-Fi & Cyberpunk", items: scifi }
+                            ]
+                        };
+                    });
+                }
+            },
+
+            getDetails: function (id, type, lang) {
+                var l = getLang(lang);
+                var endpoint = "/" + (type === "tv" ? "tv" : "movie") + "/" + id;
+                return get(endpoint, { append_to_response: "credits,recommendations,similar,release_dates,content_ratings,videos" }, l).then(function (data) {
+                    var title = data.title || data.name || data.original_title || "Unknown";
+                    var date = data.release_date || data.first_air_date || "";
+                    var year = date ? date.substring(0, 4) : "";
+                    var rating = data.vote_average ? Math.round(data.vote_average * 10) / 10 : 8.0;
+                    var matchPct = Math.min(99, Math.max(75, Math.round(rating * 10 + 15)));
+
+                    var duration = "";
+                    if (data.runtime) {
+                        var h = Math.floor(data.runtime / 60);
+                        var m = data.runtime % 60;
+                        duration = (h > 0 ? (h + "h ") : "") + m + "m";
+                    } else if (data.number_of_seasons) {
+                        duration = data.number_of_seasons + " Season" + (data.number_of_seasons > 1 ? "s" : "");
+                    }
+
+                    var cast = (data.credits && data.credits.cast) ? data.credits.cast.slice(0, 5).map(function (c) { return c.name; }).join(", ") : "";
+                    var director = "";
+                    if (data.credits && data.credits.crew) {
+                        var dirObj = data.credits.crew.find(function (c) { return c.job === "Director"; });
+                        if (dirObj) director = dirObj.name;
+                    }
+                    var genres = (data.genres || []).map(function (g) { return g.name; }).join(", ");
+
+                    var rawRecs = (data.recommendations && data.recommendations.results && data.recommendations.results.length > 0)
+                        ? data.recommendations.results
+                        : ((data.similar && data.similar.results) ? data.similar.results : []);
+                    var recs = rawRecs.filter(function (x) { return !!x.poster_path; }).slice(0, 18).map(function (x) { return formatItem(x, type); });
+
+                    if (recs.length === 0 && state.catalogFeed && state.catalogFeed.categories) {
+                        for (var cidx = 0; cidx < state.catalogFeed.categories.length; cidx++) {
+                            var catItems = state.catalogFeed.categories[cidx].items || [];
+                            for (var itmIdx = 0; itmIdx < catItems.length; itmIdx++) {
+                                var citm = catItems[itmIdx];
+                                if (citm && citm.id !== String(data.id) && citm.poster) {
+                                    recs.push(citm);
+                                    if (recs.length >= 12) break;
+                                }
+                            }
+                            if (recs.length >= 12) break;
+                        }
+                    }
+
+                    var seasons = [];
+                    if (data.seasons) {
+                        seasons = data.seasons.filter(function (s) { return s.season_number > 0; }).map(function (s) {
+                            return {
+                                season_number: s.season_number,
+                                name: s.name || ("Season " + s.season_number),
+                                episode_count: s.episode_count
+                            };
+                        });
+                    }
+
+                    return {
+                        id: String(data.id),
+                        title: title,
+                        type: type,
+                        year: year,
+                        overview: data.overview || "No overview available.",
+                        rating: String(rating),
+                        match: matchPct + "% Match",
+                        duration: duration,
+                        certification: "16+",
+                        genres: genres,
+                        cast: cast,
+                        director: director,
+                        poster: data.poster_path ? ("https://image.tmdb.org/t/p/w500" + data.poster_path) : "",
+                        backdrop: data.backdrop_path ? ("https://image.tmdb.org/t/p/w1280" + data.backdrop_path) : "",
+                        seasons: seasons,
+                        recommendations: recs
+                    };
+                });
+            },
+
+            getSeason: function (id, season, lang) {
+                var l = getLang(lang);
+                return get("/tv/" + id + "/season/" + season, null, l).then(function (data) {
+                    return {
+                        episodes: (data.episodes || []).map(function (ep) {
+                            return {
+                                id: ep.id,
+                                episode_number: ep.episode_number,
+                                name: ep.name || ("Episode " + ep.episode_number),
+                                overview: ep.overview || "",
+                                still: ep.still_path ? ("https://image.tmdb.org/t/p/w500" + ep.still_path) : "",
+                                still_path: ep.still_path ? ("https://image.tmdb.org/t/p/w500" + ep.still_path) : "",
+                                runtime: ep.runtime ? (ep.runtime + "m") : ""
+                            };
+                        })
+                    };
+                });
+            },
+
+            getTv: function (id, lang) {
+                var l = getLang(lang);
+                return get("/tv/" + id, null, l).then(function (data) {
+                    return {
+                        seasons: (data.seasons || []).filter(function (s) { return s.season_number > 0; }).map(function (s) {
+                            return {
+                                season_number: s.season_number,
+                                name: s.name || ("Season " + s.season_number),
+                                episode_count: s.episode_count
+                            };
+                        })
+                    };
+                });
+            },
+
+            search: function (q, lang) {
+                var l = getLang(lang);
+                return get("/search/multi", { query: q }, l).then(function (data) {
+                    var items = (data.results || []).filter(function (x) { return (x.media_type === "movie" || x.media_type === "tv") && !!x.poster_path; }).map(function (x) { return formatItem(x); });
+                    return { results: items };
+                });
+            }
+        };
+    })();
+
     function init() {
         playerContainer = document.getElementById("player-container");
         playerOverlay = document.getElementById("player-overlay");
@@ -125,6 +416,11 @@ var App = (function () {
         setTimeout(function () {
             focusBillboardPlay();
         }, 300);
+
+        // Silent background update check
+        setTimeout(function () {
+            checkForAppUpdates(false);
+        }, 4000);
 
         log("PStream PlayStation 5 Engine Initialized (v1.0 Baseline)");
     }
@@ -291,19 +587,20 @@ var App = (function () {
         var centerPlay = document.getElementById("player-center-playpause");
         if (centerPlay) setFocus(centerPlay);
 
-        // Request stream resolution (Cloud Edge Proxy / Zero-PC Standalone)
-        var cloudProxyPrefix = "https://pstream-proxy.ducky-ux1.workers.dev";
-        var isLocalDev = (window.location.protocol === "http:" && (window.location.port === "8080" || window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"));
-        var apiBase = isLocalDev ? "" : cloudProxyPrefix;
+        // Request stream resolution from local server
+        var provLang = "en";
+        if (state.activeProvider === "ita") provLang = "it";
+        else if (state.activeProvider === "esp") provLang = "es";
+        else if (state.activeProvider === "ger") provLang = "de";
+        else if (state.activeProvider === "fra") provLang = "fr";
+        else if (state.activeProvider === "por") provLang = "pt";
 
-        var resolveQuery = "id=" + encodeURIComponent(item.id) +
+        var resolveUrl = "/api/stream/resolve?id=" + encodeURIComponent(item.id) +
             "&type=" + encodeURIComponent(item.type || "movie") +
             "&season=" + encodeURIComponent(state.currentSeason) +
             "&episode=" + encodeURIComponent(state.currentEpisode) +
             "&provider=" + encodeURIComponent(state.activeProvider) +
-            "&lang=" + encodeURIComponent(state.activeProvider);
-
-        var resolveUrl = (apiBase ? apiBase : "") + "/api/stream/resolve?" + resolveQuery;
+            "&lang=" + encodeURIComponent(provLang);
 
         log("Resolving direct stream: " + resolveUrl);
 
@@ -314,13 +611,13 @@ var App = (function () {
                     loadHlsStream(data.streamUrl);
                 } else {
                     hideSpinner();
-                    showErrorModal(data.error || "Ad-free stream unavailable from this provider. Press X to retry or switch provider in Settings.");
+                    showErrorModal(data.error || "Ad-free stream unavailable from this provider.");
                 }
             })
             .catch(function (err) {
                 log("Stream resolution error: " + err);
                 hideSpinner();
-                showErrorModal("Connecting to streaming mirror. Press X to retry, or select another provider in Settings.");
+                showErrorModal("Network connection error. Please verify local server is running.");
             });
     }
 
@@ -335,10 +632,18 @@ var App = (function () {
         if (window.Hls && Hls.isSupported()) {
             hlsInstance = new Hls({
                 enableWorker: false,
-                maxBufferSize: 20 * 1024 * 1024,
-                maxBufferLength: 20,
-                maxMaxBufferLength: 35,
-                backBufferLength: 10,
+                maxBufferSize: 60 * 1024 * 1024,
+                maxBufferLength: 30,
+                maxMaxBufferLength: 60,
+                backBufferLength: 15,
+                maxBufferHole: 0.8,
+                maxFragLookUpTolerance: 0.5,
+                nudgeOffset: 0.2,
+                nudgeMaxRetry: 10,
+                startFragPrefetch: true,
+                fragLoadingTimeOut: 30000,
+                manifestLoadingTimeOut: 20000,
+                levelLoadingTimeOut: 20000,
                 lowLatencyMode: false
             });
 
@@ -353,20 +658,35 @@ var App = (function () {
             });
 
             hlsInstance.on(Hls.Events.ERROR, function (event, data) {
-                log("Hls error: " + data.type + " " + data.details);
-                if (data.fatal) {
+                log("Hls event: " + data.type + " " + data.details + " (fatal=" + data.fatal + ")");
+                if (data.details === "bufferStalledError") {
+                    log("Buffer stalled, nudging video currentTime forward...");
+                    if (playerVideo && !playerVideo.paused) {
+                        try {
+                            playerVideo.currentTime += 0.15;
+                        } catch (e) { }
+                    }
+                } else if (data.fatal) {
                     if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                        log("Recovering from network error...");
                         hlsInstance.startLoad();
                     } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                        log("Recovering from media error...");
                         hlsInstance.recoverMediaError();
                     } else {
-                        hlsInstance.destroy();
-                        hlsInstance = null;
-                        playerVideo.src = streamUrl;
-                        playerVideo.play().catch(function () {});
+                        log("Fatal error: attempting media recovery before fallback...");
+                        try {
+                            hlsInstance.recoverMediaError();
+                        } catch (e) {
+                            hlsInstance.destroy();
+                            hlsInstance = null;
+                            playerVideo.src = streamUrl;
+                            playerVideo.play().catch(function () {});
+                        }
                     }
                 }
             });
+
         } else if (playerVideo.canPlayType('application/vnd.apple.mpegurl')) {
             log("Using native WebKit HLS playback");
             playerVideo.src = streamUrl;
@@ -667,88 +987,68 @@ var App = (function () {
         var container = document.getElementById("drawer-episodes-list");
         container.innerHTML = '<div style="color:#888;padding:20px;">Loading episodes...</div>';
 
-        // Load season pills directly from TMDb
-        function renderPills(seasons) {
-            var pillsWrap = document.getElementById("drawer-season-pills");
-            pillsWrap.innerHTML = "";
-            seasons.forEach(function (s) {
-                var pill = document.createElement("button");
-                pill.className = "season-pill" + (s.season_number === seasonNum ? " active" : "");
-                pill.innerText = s.name || ("Season " + s.season_number);
-                pill.onclick = function () {
-                    document.querySelectorAll("#drawer-season-pills .season-pill").forEach(function (p) { p.classList.remove("active"); });
-                    pill.classList.add("active");
-                    loadDrawerEpisodes(tvId, s.season_number);
-                };
-                pillsWrap.appendChild(pill);
-            });
-        }
-
-        TMDb.getDetails(tvId, "tv", state.activeProvider)
-            .then(function (det) {
-                renderPills(det.seasons || []);
+        // Load season pills
+        TMDb.getTv(tvId, state.activeProvider || "eng")
+            .then(function (data) {
+                var pillsWrap = document.getElementById("drawer-season-pills");
+                pillsWrap.innerHTML = "";
+                var seasons = data.seasons || [];
+                seasons.forEach(function (s) {
+                    var pill = document.createElement("button");
+                    pill.className = "season-pill" + (s.season_number === seasonNum ? " active" : "");
+                    pill.innerText = s.name || ("Season " + s.season_number);
+                    pill.onclick = function () {
+                        document.querySelectorAll("#drawer-season-pills .season-pill").forEach(function (p) { p.classList.remove("active"); });
+                        pill.classList.add("active");
+                        loadDrawerEpisodes(tvId, s.season_number);
+                    };
+                    pillsWrap.appendChild(pill);
+                });
             })
-            .catch(function () {
-                fetch("/api/tv?id=" + tvId + "&lang=" + encodeURIComponent(state.activeProvider || "eng"))
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        renderPills(data.seasons || []);
-                    })
-                    .catch(function () {});
-            });
+            .catch(function () {});
 
-        function renderDrawerEps(eps) {
-            container.innerHTML = "";
-            if (eps.length === 0) {
-                container.innerHTML = '<div style="color:#888;">No episodes found.</div>';
-                return;
-            }
-
-            eps.forEach(function (ep) {
-                var item = document.createElement("div");
-                item.className = "episode-item";
-                var isCurrent = (ep.episode_number === state.currentEpisode && seasonNum === state.currentSeason);
-                if (isCurrent) {
-                    item.style.borderColor = "var(--red-pstream)";
+        TMDb.getSeason(tvId, seasonNum, state.activeProvider || "eng")
+            .then(function (data) {
+                container.innerHTML = "";
+                var eps = data.episodes || [];
+                if (eps.length === 0) {
+                    container.innerHTML = '<div style="color:#888;">No episodes found.</div>';
+                    return;
                 }
 
-                var thumb = ep.still || (state.currentItem ? state.currentItem.backdrop : "");
-                item.innerHTML =
-                    '<div class="episode-thumb-wrap">' +
-                        '<img src="' + thumb + '" alt="' + ep.name + '">' +
-                    '</div>' +
-                    '<div class="episode-meta-col">' +
-                        '<div class="episode-title-row">' +
-                            '<span>' + ep.episode_number + '. ' + ep.name + '</span>' +
-                            '<span class="episode-runtime">' + (ep.runtime || "") + '</span>' +
+                eps.forEach(function (ep) {
+                    var item = document.createElement("div");
+                    item.className = "episode-item";
+                    var isCurrent = (ep.episode_number === state.currentEpisode && seasonNum === state.currentSeason);
+                    if (isCurrent) {
+                        item.style.borderColor = "var(--red-pstream)";
+                    }
+
+                    var thumb = ep.still || (state.currentItem ? state.currentItem.backdrop : "");
+                    item.innerHTML =
+                        '<div class="episode-thumb-wrap">' +
+                            '<img src="' + thumb + '" alt="' + ep.name + '">' +
                         '</div>' +
-                        '<div class="episode-synopsis">' + (ep.overview || "No overview available.") + '</div>' +
-                    '</div>';
+                        '<div class="episode-meta-col">' +
+                            '<div class="episode-title-row">' +
+                                '<span>' + ep.episode_number + '. ' + ep.name + '</span>' +
+                                '<span class="episode-runtime">' + (ep.runtime || "") + '</span>' +
+                            '</div>' +
+                            '<div class="episode-synopsis">' + (ep.overview || "No overview available.") + '</div>' +
+                        '</div>';
 
-                item.onclick = function () {
-                    closeEpisodesDrawer();
-                    playMedia(state.currentItem, seasonNum, ep.episode_number, ep.name);
-                };
+                    item.onclick = function () {
+                        closeEpisodesDrawer();
+                        playMedia(state.currentItem, seasonNum, ep.episode_number, ep.name);
+                    };
 
-                container.appendChild(item);
-            });
+                    container.appendChild(item);
+                });
 
-            var firstEp = container.querySelector(".episode-item");
-            if (firstEp) setFocus(firstEp);
-        }
-
-        TMDb.getSeason(tvId, seasonNum, state.activeProvider)
-            .then(function (data) {
-                renderDrawerEps(data.episodes || []);
+                var firstEp = container.querySelector(".episode-item");
+                if (firstEp) setFocus(firstEp);
             })
-            .catch(function () {
-                fetch("/api/season?id=" + tvId + "&season=" + seasonNum + "&lang=" + encodeURIComponent(state.activeProvider || "eng"))
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        renderDrawerEps(data.episodes || []);
-                    })
-                    .catch(function () {});
-            });
+            .catch(function () {});
     }
 
     function toggleAudioDrawer() {
@@ -1152,7 +1452,7 @@ var App = (function () {
             var timeBadge = (item.currentTime > 0) ? (formatTime(item.currentTime) + (item.duration > 0 ? " / " + formatTime(item.duration) : "")) : "";
 
             wrap.innerHTML =
-                '<img src="' + (item.poster || 'https://via.placeholder.com/500x750') + '" alt="' + item.title + '" loading="lazy">' +
+                '<img src="' + (item.poster || PLACEHOLDER_POSTER) + '" alt="' + item.title + '" loading="lazy" onerror="this.onerror=null;this.src=\'' + PLACEHOLDER_POSTER + '\';">' +
                 '<div class="card-badge-top-left">' + tag + '</div>' +
                 (pct > 0 ? '<div class="card-progress-bar-wrap"><div class="card-progress-bar-fill" style="width:' + pct + '%;"></div></div>' : '') +
                 (timeBadge ? '<div class="card-progress-timestamp">' + timeBadge + '</div>' : '') +
@@ -1191,367 +1491,6 @@ var App = (function () {
         localStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
         state.favoritesList = list;
     }
-
-    // ==========================================
-    // Standalone TMDb Client-Side Catalog Engine
-    // 100% Zero-PC Required - Direct High-Speed CORS API
-    // ==========================================
-    var TMDb = (function () {
-        var API_KEY = "adc5047f27e588c9347087931a696cf4";
-        var BASE = "https://api.themoviedb.org/3";
-        var cache = { feeds: {}, details: {}, seasons: {} };
-
-        var LANG_MAP = {
-            "eng": "en-US",
-            "ita": "it-IT",
-            "esp": "es-ES",
-            "ger": "de-DE",
-            "fra": "fr-FR",
-            "anime": "ja-JP",
-            "por": "pt-BR"
-        };
-
-        function getLang(prov) {
-            return LANG_MAP[prov] || "en-US";
-        }
-
-        function tmdbGet(endpoint, lang) {
-            var sep = endpoint.indexOf("?") !== -1 ? "&" : "?";
-            var url = BASE + endpoint + sep + "api_key=" + API_KEY + "&language=" + (lang || "en-US");
-            return fetch(url).then(function (res) {
-                if (!res.ok) throw new Error("TMDb error " + res.status);
-                return res.json();
-            });
-        }
-
-        function formatItem(it, defType) {
-            var mtype = it.media_type || defType || "movie";
-            var title = it.title || it.name || it.original_title || "Unknown";
-            var date = it.release_date || it.first_air_date || "";
-            var year = date ? date.substring(0, 4) : "";
-            var poster = it.poster_path ? ("https://image.tmdb.org/t/p/w500" + it.poster_path) : "";
-            var backdrop = it.backdrop_path ? ("https://image.tmdb.org/t/p/w1280" + it.backdrop_path) : "";
-            var rating = Math.round((it.vote_average || 0) * 10) / 10;
-            var matchPct = rating > 0 ? Math.min(99, Math.max(75, Math.round(rating * 10 + 15))) : 92;
-
-            return {
-                id: String(it.id),
-                title: title,
-                type: mtype,
-                year: year,
-                overview: it.overview || "",
-                rating: String(rating),
-                match: matchPct + "% Match",
-                poster: poster,
-                backdrop: backdrop
-            };
-        }
-
-        function getFeed(tab, provider) {
-            var lang = getLang(provider);
-            var cacheKey = tab + "_" + lang;
-            if (cache.feeds[cacheKey]) {
-                return Promise.resolve(cache.feeds[cacheKey]);
-            }
-
-            var feed = { tab: tab, featured: null, categories: [] };
-
-            if (tab === "movies") {
-                return Promise.all([
-                    tmdbGet("/movie/popular", lang),
-                    tmdbGet("/trending/movie/week", lang),
-                    tmdbGet("/movie/top_rated", lang),
-                    tmdbGet("/discover/movie?with_genres=28&sort_by=popularity.desc", lang),
-                    tmdbGet("/discover/movie?with_genres=878&sort_by=popularity.desc", lang),
-                    tmdbGet("/discover/movie?with_genres=27&sort_by=popularity.desc", lang),
-                    tmdbGet("/discover/movie?with_genres=35&sort_by=popularity.desc", lang)
-                ]).then(function (res) {
-                    var pop = res[0], trend = res[1], top = res[2], act = res[3], scifi = res[4], horror = res[5], comedy = res[6];
-                    if (trend && trend.results) {
-                        var items = trend.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
-                        if (items.length) {
-                            feed.featured = items[0];
-                            feed.categories.push({ title: "Top 10 Movies Today", isTop10: true, items: items.slice(0, 10) });
-                        }
-                    }
-                    if (pop && pop.results) {
-                        var pItems = pop.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
-                        if (pItems.length) feed.categories.push({ title: "Popular on PStream", items: pItems });
-                    }
-                    if (top && top.results) {
-                        var tItems = top.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
-                        if (tItems.length) feed.categories.push({ title: "Critically Acclaimed Films", items: tItems });
-                    }
-                    if (act && act.results) {
-                        var aItems = act.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
-                        if (aItems.length) feed.categories.push({ title: "Action & Adventure", items: aItems });
-                    }
-                    if (scifi && scifi.results) {
-                        var sItems = scifi.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
-                        if (sItems.length) feed.categories.push({ title: "Sci-Fi & Fantasy", items: sItems });
-                    }
-                    if (horror && horror.results) {
-                        var hItems = horror.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
-                        if (hItems.length) feed.categories.push({ title: "Horror & Suspense", items: hItems });
-                    }
-                    if (comedy && comedy.results) {
-                        var cItems = comedy.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
-                        if (cItems.length) feed.categories.push({ title: "Comedy Hits", items: cItems });
-                    }
-                    cache.feeds[cacheKey] = feed;
-                    return feed;
-                });
-            } else if (tab === "tv") {
-                return Promise.all([
-                    tmdbGet("/tv/popular", lang),
-                    tmdbGet("/trending/tv/week", lang),
-                    tmdbGet("/tv/top_rated", lang),
-                    tmdbGet("/discover/tv?with_genres=18&sort_by=popularity.desc", lang),
-                    tmdbGet("/discover/tv?with_genres=10765&sort_by=popularity.desc", lang),
-                    tmdbGet("/discover/tv?with_genres=35&sort_by=popularity.desc", lang),
-                    tmdbGet("/discover/tv?with_genres=80&sort_by=popularity.desc", lang)
-                ]).then(function (res) {
-                    var pop = res[0], trend = res[1], top = res[2], drama = res[3], scifi = res[4], comedy = res[5], crime = res[6];
-                    if (trend && trend.results) {
-                        var items = trend.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (items.length) {
-                            feed.featured = items[0];
-                            feed.categories.push({ title: "Top 10 Series Today", isTop10: true, items: items.slice(0, 10) });
-                        }
-                    }
-                    if (pop && pop.results) {
-                        var pItems = pop.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (pItems.length) feed.categories.push({ title: "Binge-Worthy TV Shows", items: pItems });
-                    }
-                    if (top && top.results) {
-                        var tItems = top.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (tItems.length) feed.categories.push({ title: "All-Time Great Television", items: tItems });
-                    }
-                    if (drama && drama.results) {
-                        var dItems = drama.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (dItems.length) feed.categories.push({ title: "Prestige Dramas", items: dItems });
-                    }
-                    if (scifi && scifi.results) {
-                        var sItems = scifi.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (sItems.length) feed.categories.push({ title: "Sci-Fi & Fantasy Series", items: sItems });
-                    }
-                    if (comedy && comedy.results) {
-                        var cItems = comedy.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (cItems.length) feed.categories.push({ title: "Comedy Series", items: cItems });
-                    }
-                    if (crime && crime.results) {
-                        var crItems = crime.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (crItems.length) feed.categories.push({ title: "Crime & Mystery", items: crItems });
-                    }
-                    cache.feeds[cacheKey] = feed;
-                    return feed;
-                });
-            } else if (tab === "anime") {
-                return Promise.all([
-                    tmdbGet("/discover/tv?with_genres=16&with_original_language=ja&sort_by=popularity.desc", lang),
-                    tmdbGet("/discover/movie?with_genres=16&with_original_language=ja&sort_by=popularity.desc", lang),
-                    tmdbGet("/discover/tv?with_genres=16&with_original_language=ja&sort_by=vote_average.desc&vote_count.gte=200", lang),
-                    tmdbGet("/discover/tv?with_genres=16,10759&with_original_language=ja&sort_by=popularity.desc", lang),
-                    tmdbGet("/discover/tv?with_genres=16,10765&with_original_language=ja&sort_by=popularity.desc", lang)
-                ]).then(function (res) {
-                    var pop = res[0], mov = res[1], top = res[2], act = res[3], fan = res[4];
-                    if (pop && pop.results) {
-                        var items = pop.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (items.length) {
-                            feed.featured = items[0];
-                            feed.categories.push({ title: "Top 10 Anime Series", isTop10: true, items: items.slice(0, 10) });
-                            feed.categories.push({ title: "Popular Anime Worldwide", items: items });
-                        }
-                    }
-                    if (mov && mov.results) {
-                        var mItems = mov.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
-                        if (mItems.length) feed.categories.push({ title: "Acclaimed Anime Features", items: mItems });
-                    }
-                    if (top && top.results) {
-                        var tItems = top.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (tItems.length) feed.categories.push({ title: "Masterpiece Anime Series", items: tItems });
-                    }
-                    if (act && act.results) {
-                        var aItems = act.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (aItems.length) feed.categories.push({ title: "High-Octane Shonen & Action", items: aItems });
-                    }
-                    if (fan && fan.results) {
-                        var fItems = fan.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (fItems.length) feed.categories.push({ title: "Fantasy & Supernatural Anime", items: fItems });
-                    }
-                    cache.feeds[cacheKey] = feed;
-                    return feed;
-                });
-            } else {
-                // Home tab
-                return Promise.all([
-                    tmdbGet("/trending/all/week", lang),
-                    tmdbGet("/movie/popular", lang),
-                    tmdbGet("/tv/popular", lang),
-                    tmdbGet("/movie/top_rated", lang),
-                    tmdbGet("/tv/top_rated", lang),
-                    tmdbGet("/discover/movie?with_genres=28&sort_by=popularity.desc", lang),
-                    tmdbGet("/discover/tv?with_genres=16&sort_by=popularity.desc", lang)
-                ]).then(function (res) {
-                    var trend = res[0], popMov = res[1], popTv = res[2], topMov = res[3], topTv = res[4], act = res[5], ani = res[6];
-                    if (trend && trend.results) {
-                        var items = trend.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x); });
-                        if (items.length) {
-                            feed.featured = items[0];
-                            feed.categories.push({ title: "Trending Across PlayStation", isTop10: true, items: items.slice(0, 10) });
-                        }
-                    }
-                    if (popMov && popMov.results) {
-                        var mItems = popMov.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
-                        if (mItems.length) feed.categories.push({ title: "Blockbuster Movies", items: mItems });
-                    }
-                    if (popTv && popTv.results) {
-                        var tItems = popTv.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (tItems.length) feed.categories.push({ title: "Top Television Series", items: tItems });
-                    }
-                    if (topMov && topMov.results) {
-                        var tmItems = topMov.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
-                        if (tmItems.length) feed.categories.push({ title: "Critically Acclaimed Films", items: tmItems });
-                    }
-                    if (topTv && topTv.results) {
-                        var ttItems = topTv.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (ttItems.length) feed.categories.push({ title: "Hall of Fame TV Shows", items: ttItems });
-                    }
-                    if (act && act.results) {
-                        var aItems = act.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "movie"); });
-                        if (aItems.length) feed.categories.push({ title: "Explosive Action Hits", items: aItems });
-                    }
-                    if (ani && ani.results) {
-                        var anItems = ani.results.filter(function (x) { return x.poster_path; }).map(function (x) { return formatItem(x, "tv"); });
-                        if (anItems.length) feed.categories.push({ title: "Anime & Animation Favorites", items: anItems });
-                    }
-                    cache.feeds[cacheKey] = feed;
-                    return feed;
-                });
-            }
-        }
-
-        function getDetails(id, type, provider) {
-            var lang = getLang(provider);
-            var mtype = (type === "tv") ? "tv" : "movie";
-            var cacheKey = "det_" + mtype + "_" + id + "_" + lang;
-            if (cache.details[cacheKey]) {
-                return Promise.resolve(cache.details[cacheKey]);
-            }
-
-            return tmdbGet("/" + mtype + "/" + id + "?append_to_response=credits,recommendations", lang).then(function (d) {
-                var title = d.title || d.name || d.original_title || "Unknown";
-                var date = d.release_date || d.first_air_date || "";
-                var year = date ? date.substring(0, 4) : "";
-                var rating = Math.round((d.vote_average || 0) * 10) / 10;
-                var matchPct = rating > 0 ? Math.min(99, Math.max(75, Math.round(rating * 10 + 15))) : 92;
-
-                var genres = (d.genres || []).map(function (g) { return g.name; }).slice(0, 3).join(", ");
-                var castList = (d.credits && d.credits.cast) ? d.credits.cast.slice(0, 4).map(function (c) { return c.name; }).join(", ") : "";
-                var director = "";
-                if (d.credits && d.credits.crew) {
-                    var dir = d.credits.crew.find(function (c) { return c.job === "Director"; });
-                    if (dir) director = dir.name;
-                }
-
-                var durationStr = "";
-                if (mtype === "movie" && d.runtime) {
-                    var h = Math.floor(d.runtime / 60);
-                    var m = d.runtime % 60;
-                    durationStr = (h > 0 ? h + "h " : "") + m + "m";
-                } else if (mtype === "tv" && d.number_of_seasons) {
-                    durationStr = d.number_of_seasons + " Season" + (d.number_of_seasons > 1 ? "s" : "");
-                }
-
-                var recs = (d.recommendations && d.recommendations.results) ? d.recommendations.results.filter(function (x) { return x.poster_path; }).slice(0, 10).map(function (x) { return formatItem(x, mtype); }) : [];
-
-                var seasons = [];
-                if (mtype === "tv" && d.seasons) {
-                    seasons = d.seasons.filter(function (s) { return s.season_number > 0; }).map(function (s) {
-                        return {
-                            season_number: s.season_number,
-                            name: s.name || ("Season " + s.season_number),
-                            episode_count: s.episode_count || 0
-                        };
-                    });
-                }
-
-                var details = {
-                    id: String(d.id),
-                    title: title,
-                    type: mtype,
-                    year: year,
-                    overview: d.overview || "",
-                    rating: String(rating),
-                    match: matchPct + "% Match",
-                    poster: d.poster_path ? ("https://image.tmdb.org/t/p/w500" + d.poster_path) : "",
-                    backdrop: d.backdrop_path ? ("https://image.tmdb.org/t/p/w1280" + d.backdrop_path) : "",
-                    certification: "16+",
-                    duration: durationStr || "2h 00m",
-                    cast: castList || "Not listed",
-                    genres: genres || "Drama",
-                    director: director || "Not listed",
-                    seasons: seasons,
-                    recommendations: recs
-                };
-
-                cache.details[cacheKey] = details;
-                return details;
-            });
-        }
-
-        function getSeason(tvId, seasonNum, provider) {
-            var lang = getLang(provider);
-            var cacheKey = "s_" + tvId + "_" + seasonNum + "_" + lang;
-            if (cache.seasons[cacheKey]) {
-                return Promise.resolve(cache.seasons[cacheKey]);
-            }
-
-            return tmdbGet("/tv/" + tvId + "/season/" + seasonNum, lang).then(function (d) {
-                var eps = [];
-                if (d.episodes) {
-                    eps = d.episodes.map(function (ep) {
-                        var runtimeStr = ep.runtime ? (ep.runtime + "m") : "";
-                        return {
-                            episode_number: ep.episode_number,
-                            name: ep.name || ("Episode " + ep.episode_number),
-                            overview: ep.overview || "",
-                            still: ep.still_path ? ("https://image.tmdb.org/t/p/w300" + ep.still_path) : "",
-                            runtime: runtimeStr
-                        };
-                    });
-                }
-                var res = { episodes: eps };
-                cache.seasons[cacheKey] = res;
-                return res;
-            });
-        }
-
-        function search(query, provider) {
-            var lang = getLang(provider);
-            if (!query || !query.trim()) return Promise.resolve({ results: [] });
-
-            return tmdbGet("/search/multi?query=" + encodeURIComponent(query.trim()), lang).then(function (d) {
-                var results = [];
-                if (d.results) {
-                    results = d.results.filter(function (x) {
-                        return (x.media_type === "movie" || x.media_type === "tv") && x.poster_path;
-                    }).map(function (x) {
-                        return formatItem(x, x.media_type);
-                    });
-                }
-                return { results: results };
-            });
-        }
-
-        return {
-            getFeed: getFeed,
-            getDetails: getDetails,
-            getSeason: getSeason,
-            search: search,
-            formatItem: formatItem
-        };
-    })();
 
     // ==========================================
     // Tab & Catalog Loading Engine
@@ -1598,26 +1537,15 @@ var App = (function () {
         var container = document.getElementById("catalog-rows");
         container.innerHTML = '<div style="text-align:center;padding:70px;color:#808080;font-size:18px;font-weight:700;">Loading PStream Experience...</div>';
 
-        // High-Speed Direct TMDb Fetch (Autonomous & Zero-PC Required)
-        TMDb.getFeed(tabName, state.activeProvider)
+        TMDb.getFeed(tabName, state.activeProvider || "eng")
             .then(function (data) {
                 state.catalogFeed = data;
                 renderFeed(data);
                 renderContinueWatching();
             })
             .catch(function (err) {
-                log("TMDb direct fetch fallback to local /api/feed: " + err);
-                fetch("/api/feed?tab=" + tabName + "&lang=" + encodeURIComponent(state.activeProvider || "eng"))
-                    .then(function (res) { return res.json(); })
-                    .then(function (data) {
-                        state.catalogFeed = data;
-                        renderFeed(data);
-                        renderContinueWatching();
-                    })
-                    .catch(function (e) {
-                        log("Feed loading error: " + e);
-                        container.innerHTML = '<div style="text-align:center;padding:70px;color:#e50914;font-size:18px;">Failed to load catalog feed. Please check your network connection.</div>';
-                    });
+                log("Error loading tab feed: " + err);
+                container.innerHTML = '<div style="text-align:center;padding:70px;color:#e50914;font-size:18px;">Failed to connect to catalog feed. Please retry.</div>';
             });
     }
 
@@ -1697,7 +1625,7 @@ var App = (function () {
                 card.dataset.type = item.type;
 
                 card.innerHTML =
-                    '<img src="' + (item.poster || 'https://via.placeholder.com/500x750') + '" alt="' + item.title + '" loading="lazy">' +
+                    '<img src="' + (item.poster || PLACEHOLDER_POSTER) + '" alt="' + item.title + '" loading="lazy" onerror="this.onerror=null;this.src=\'' + PLACEHOLDER_POSTER + '\';">' +
                     '<div class="card-badge-top-left">' + (item.type === "tv" ? "TV" : "FILM") + '</div>' +
                     '<div class="card-badge-top-right">' +
                         '<svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg> ' +
@@ -1785,7 +1713,14 @@ var App = (function () {
         modalNav.episodeIndex = 0;
         modalNav.recIndex = 0;
 
-        detailModal.style.display = "flex";
+        detailModal.style.display = "block";
+        if (detailModal) detailModal.scrollTop = 0;
+
+        var bDropInit = document.getElementById("modal-backdrop");
+        if (bDropInit) {
+            bDropInit.style.opacity = "0";
+            bDropInit.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+        }
 
         document.getElementById("modal-title").innerText = "Loading...";
         document.getElementById("modal-overview").innerText = "Fetching details from TMDb...";
@@ -1799,27 +1734,15 @@ var App = (function () {
         if (playBtn) setFocus(playBtn);
 
         var mtype = (mediaType === "tv") ? "tv" : "movie";
-
-        // Standalone TMDb Direct Details
-        TMDb.getDetails(mediaId, mtype, state.activeProvider)
+        TMDb.getDetails(mediaId, mtype, state.activeProvider || "eng")
             .then(function (data) {
                 if (!data.type) data.type = mtype;
                 state.currentDetails = data;
                 renderDetailModal(data);
             })
-            .catch(function (err) {
-                log("TMDb direct details error, trying local fallback: " + err);
-                var epUrl = "/api/details?id=" + encodeURIComponent(mediaId) + "&type=" + mtype + "&lang=en-US";
-                fetch(epUrl)
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        if (!data.type) data.type = mtype;
-                        state.currentDetails = data;
-                        renderDetailModal(data);
-                    })
-                    .catch(function (e) {
-                        log("Error loading media details: " + e);
-                    });
+            .catch(function (e) {
+                log("Error loading media details: " + e);
+                document.getElementById("modal-overview").innerText = "Failed to load details.";
             });
     }
 
@@ -1827,7 +1750,14 @@ var App = (function () {
         if (!data) return;
 
         var bDrop = document.getElementById("modal-backdrop");
-        if (bDrop && data.backdrop) bDrop.src = data.backdrop;
+        if (bDrop) {
+            if (data.backdrop) {
+                bDrop.src = data.backdrop;
+                bDrop.style.opacity = "0.82";
+            } else {
+                bDrop.style.opacity = "0";
+            }
+        }
 
         document.getElementById("modal-title").innerText = data.title;
         document.getElementById("modal-overview").innerText = data.overview || "No synopsis available.";
@@ -1873,16 +1803,24 @@ var App = (function () {
 
         // Recommendations Grid
         var recsGrid = document.getElementById("modal-recs-grid");
+        var recsSec = document.getElementById("modal-recs-section");
         recsGrid.innerHTML = "";
         if (data.recommendations && data.recommendations.length > 0) {
             data.recommendations.forEach(function (rec) {
                 var card = document.createElement("div");
                 card.className = "recommendation-card";
+                card.tabIndex = 0;
                 card.innerHTML =
-                    '<img src="' + (rec.poster || 'https://via.placeholder.com/300x450') + '" alt="' + rec.title + '">' +
+                    '<div class="rec-poster-wrap">' +
+                        '<img class="rec-poster-img" src="' + (rec.poster || PLACEHOLDER_POSTER) + '" alt="' + (rec.title || 'Poster') + '" loading="lazy" onerror="this.onerror=null;this.src=\'' + PLACEHOLDER_POSTER + '\';">' +
+                        (rec.rating ? ('<div class="rec-rating-badge">★ ' + rec.rating + '</div>') : '') +
+                    '</div>' +
                     '<div class="rec-card-body">' +
-                        '<div class="rec-card-title">' + rec.title + '</div>' +
-                        '<div style="font-size:12px;color:#aaa;margin-top:4px;">' + (rec.rating || "8.0") + ' Rating</div>' +
+                        '<div class="rec-card-title">' + (rec.title || 'Unknown') + '</div>' +
+                        '<div class="rec-card-meta">' +
+                            '<span class="rec-card-match">' + (rec.match || '95% Match') + '</span>' +
+                            (rec.year ? ('<span class="rec-card-year">' + rec.year + '</span>') : '') +
+                        '</div>' +
                     '</div>';
 
                 card.onclick = function () {
@@ -1891,6 +1829,9 @@ var App = (function () {
 
                 recsGrid.appendChild(card);
             });
+            if (recsSec) recsSec.style.display = "block";
+        } else {
+            if (recsSec) recsSec.style.display = "none";
         }
     }
 
@@ -1923,70 +1864,68 @@ var App = (function () {
         var epList = document.getElementById("modal-episodes-list");
         epList.innerHTML = '<div style="color:#888;padding:20px;">Loading season episodes...</div>';
 
-        function renderEps(eps) {
-            epList.innerHTML = "";
-            if (eps.length === 0) {
-                epList.innerHTML = '<div style="color:#888;padding:20px;">No episodes available.</div>';
-                return;
-            }
-
-            eps.forEach(function (ep) {
-                var item = document.createElement("div");
-                item.className = "episode-item";
-
-                var thumb = ep.still || (state.currentDetails ? state.currentDetails.backdrop : "");
-                item.innerHTML =
-                    '<div class="episode-thumb-wrap">' +
-                        '<img src="' + thumb + '" alt="' + ep.name + '">' +
-                        '<div class="episode-play-overlay">' +
-                            '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>' +
-                        '</div>' +
-                    '</div>' +
-                    '<div class="episode-meta-col">' +
-                        '<div class="episode-title-row">' +
-                            '<span>' + ep.episode_number + '. ' + ep.name + '</span>' +
-                            '<span class="episode-runtime">' + (ep.runtime || "") + '</span>' +
-                        '</div>' +
-                        '<div class="episode-synopsis">' + (ep.overview || "No overview available.") + '</div>' +
-                    '</div>';
-
-                item.onclick = function () {
-                    var mediaObj = {
-                        id: state.currentDetails.id,
-                        title: state.currentDetails.title,
-                        type: "tv",
-                        poster: state.currentDetails.poster,
-                        backdrop: state.currentDetails.backdrop,
-                        year: state.currentDetails.year,
-                        rating: state.currentDetails.rating,
-                        match: state.currentDetails.match
-                    };
-                    detailModal.style.display = "none";
-                    playMedia(mediaObj, seasonNum, ep.episode_number, ep.name);
-                };
-
-                epList.appendChild(item);
-            });
-        }
-
-        TMDb.getSeason(tvId, seasonNum, state.activeProvider)
+        TMDb.getSeason(tvId, seasonNum, state.activeProvider || "eng")
             .then(function (data) {
-                renderEps(data.episodes || []);
+                epList.innerHTML = "";
+                var eps = data.episodes || [];
+                if (eps.length === 0) {
+                    epList.innerHTML = '<div style="color:#888;padding:20px;">No episodes available.</div>';
+                    return;
+                }
+
+                eps.forEach(function (ep) {
+                    var item = document.createElement("div");
+                    item.className = "episode-item";
+
+                    var thumb = ep.still || (state.currentDetails ? state.currentDetails.backdrop : "");
+                    var thumbSrc = thumb || PLACEHOLDER_POSTER;
+                    item.innerHTML =
+                        '<div class="episode-thumb-wrap">' +
+                            '<img src="' + thumbSrc + '" alt="' + ep.name + '" onerror="this.onerror=null;this.src=\'' + PLACEHOLDER_POSTER + '\';">' +
+                            '<div class="episode-play-overlay">' +
+                                '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="episode-meta-col">' +
+                            '<div class="episode-title-row">' +
+                                '<span>' + ep.episode_number + '. ' + ep.name + '</span>' +
+                                '<span class="episode-runtime">' + (ep.runtime || "") + '</span>' +
+                            '</div>' +
+                            '<div class="episode-synopsis">' + (ep.overview || "No overview available.") + '</div>' +
+                        '</div>';
+
+                    item.onclick = function () {
+                        var mediaObj = {
+                            id: state.currentDetails.id,
+                            title: state.currentDetails.title,
+                            type: "tv",
+                            poster: state.currentDetails.poster,
+                            backdrop: state.currentDetails.backdrop,
+                            year: state.currentDetails.year,
+                            rating: state.currentDetails.rating,
+                            match: state.currentDetails.match
+                        };
+                        detailModal.style.display = "none";
+                        playMedia(mediaObj, seasonNum, ep.episode_number, ep.name);
+                    };
+
+                    epList.appendChild(item);
+                });
             })
-            .catch(function (err) {
-                log("TMDb direct season error, trying local fallback: " + err);
-                fetch("/api/season?id=" + tvId + "&season=" + seasonNum + "&lang=" + encodeURIComponent(state.activeProvider || "eng"))
-                    .then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        renderEps(data.episodes || []);
-                    })
-                    .catch(function (e) {
-                        log("Error fetching season episodes: " + e);
-                    });
+            .catch(function (e) {
+                log("Error fetching season episodes: " + e);
             });
     }
 
     function closeDetailModal() {
+        if (modalScrollTimer) {
+            cancelAnimationFrame(modalScrollTimer);
+            modalScrollTimer = null;
+        }
+        if (pillScrollTimer) {
+            cancelAnimationFrame(pillScrollTimer);
+            pillScrollTimer = null;
+        }
         detailModal.style.display = "none";
         state.view = "browse";
         state.currentDetails = null;
@@ -2032,16 +1971,9 @@ var App = (function () {
                     if (continueSec) continueSec.style.display = "none";
                     window.scrollTo(0, 0);
 
-                    TMDb.search(q, state.activeProvider)
+                    TMDb.search(q, state.activeProvider || "eng")
                         .then(function (results) {
                             renderSearchResults(results);
-                        })
-                        .catch(function () {
-                            fetch("/api/search?q=" + encodeURIComponent(q) + "&lang=" + encodeURIComponent(state.activeProvider || "eng"))
-                                .then(function (r) { return r.json(); })
-                                .then(function (results) {
-                                    renderSearchResults(results);
-                                });
                         });
                 } else if (q.length === 0) {
                     if (state.currentTab === "search") {
@@ -2197,6 +2129,141 @@ var App = (function () {
         if (resetBtn) {
             resetBtn.onclick = resetAllSettings;
         }
+
+        // App Update Buttons Wiring
+        var checkUpdateBtn = document.getElementById("btn-check-update");
+        if (checkUpdateBtn) {
+            checkUpdateBtn.onclick = function () {
+                checkForAppUpdates(true);
+            };
+        }
+
+        var bannerUpdateBtn = document.getElementById("update-banner-btn");
+        if (bannerUpdateBtn) {
+            bannerUpdateBtn.onclick = applyAppUpdate;
+        }
+
+        var bannerDismissBtn = document.getElementById("update-banner-dismiss");
+        if (bannerDismissBtn) {
+            bannerDismissBtn.onclick = function () {
+                state.updateBannerDismissed = true;
+                var banner = document.getElementById("pstream-update-banner");
+                if (banner) banner.style.display = "none";
+            };
+        }
+    }
+
+    function checkForAppUpdates(interactive) {
+        var statusText = document.getElementById("update-status-text");
+        var checkBtn = document.getElementById("btn-check-update");
+        if (interactive && statusText) {
+            statusText.innerText = "Checking GitHub for updates...";
+            statusText.style.color = "#aaa";
+        }
+
+        fetch("/api/check_update")
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                log("Update check response: " + JSON.stringify(data));
+                if (data.update_available) {
+                    var hint = document.getElementById("settings-version-hint");
+                    if (hint) {
+                        hint.innerText = "v" + data.current_version + " (New version v" + data.latest_version + " available!)";
+                    }
+                    if (statusText) {
+                        statusText.innerText = "Update v" + data.latest_version + " available!";
+                        statusText.style.color = "#46d369";
+                    }
+                    if (checkBtn) {
+                        checkBtn.innerText = "Install Update Now (v" + data.latest_version + ")";
+                        checkBtn.onclick = applyAppUpdate;
+                    }
+
+                    // Show notification banner if not dismissed
+                    var banner = document.getElementById("pstream-update-banner");
+                    var bannerText = document.getElementById("update-banner-text");
+                    if (banner && !state.updateBannerDismissed) {
+                        if (bannerText) {
+                            bannerText.innerText = "PStream v" + data.latest_version + " is available on GitHub!";
+                        }
+                        banner.style.display = "block";
+                    }
+                } else {
+                    if (interactive && statusText) {
+                        if (data.status === "offline") {
+                            statusText.innerText = "Offline / GitHub unreachable.";
+                            statusText.style.color = "#ff9800";
+                        } else {
+                            statusText.innerText = "PStream is up to date (v" + data.current_version + ").";
+                            statusText.style.color = "#aaa";
+                        }
+                    }
+                }
+            })
+            .catch(function (err) {
+                if (interactive && statusText) {
+                    statusText.innerText = "Could not check for updates.";
+                    statusText.style.color = "#e50914";
+                }
+            });
+    }
+
+    function applyAppUpdate() {
+        var statusText = document.getElementById("update-status-text");
+        var checkBtn = document.getElementById("btn-check-update");
+        var bannerBtn = document.getElementById("update-banner-btn");
+
+        if (statusText) {
+            statusText.innerText = "Downloading update from GitHub...";
+            statusText.style.color = "#e50914";
+        }
+        if (checkBtn) {
+            checkBtn.disabled = true;
+            checkBtn.innerText = "Updating...";
+        }
+        if (bannerBtn) {
+            bannerBtn.disabled = true;
+            bannerBtn.innerText = "Updating...";
+        }
+
+        fetch("/api/apply_update")
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    if (statusText) {
+                        statusText.innerText = "Update complete! Reloading app in 2s...";
+                        statusText.style.color = "#46d369";
+                    }
+                    var bannerText = document.getElementById("update-banner-text");
+                    if (bannerText) {
+                        bannerText.innerText = "Update complete! Reloading...";
+                    }
+                    setTimeout(function () {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    if (statusText) {
+                        statusText.innerText = "Update failed: " + (data.message || "Unknown error");
+                        statusText.style.color = "#e50914";
+                    }
+                    if (checkBtn) {
+                        checkBtn.disabled = false;
+                        checkBtn.innerText = "Retry Update";
+                    }
+                    if (bannerBtn) {
+                        bannerBtn.disabled = false;
+                        bannerBtn.innerText = "Retry";
+                    }
+                }
+            })
+            .catch(function (err) {
+                if (statusText) {
+                    statusText.innerText = "Update download error: " + err;
+                    statusText.style.color = "#e50914";
+                }
+                if (checkBtn) checkBtn.disabled = false;
+                if (bannerBtn) bannerBtn.disabled = false;
+            });
     }
 
     function renderSearchResults(data) {
@@ -2236,7 +2303,7 @@ var App = (function () {
             card.dataset.type = item.type;
 
             card.innerHTML =
-                '<img src="' + (item.poster || 'https://via.placeholder.com/500x750') + '" alt="' + item.title + '">' +
+                '<img src="' + (item.poster || PLACEHOLDER_POSTER) + '" alt="' + item.title + '" onerror="this.onerror=null;this.src=\'' + PLACEHOLDER_POSTER + '\';">' +
                 '<div class="card-badge-top-left">' + (item.type === "tv" ? "TV" : "FILM") + '</div>' +
                 '<div class="card-info-overlay">' +
                     '<div class="card-title-text">' + item.title + '</div>' +
@@ -2266,16 +2333,9 @@ var App = (function () {
 
         if (q.length > 0) {
             container.innerHTML = '<div style="text-align:center;padding:50px;color:#808080;font-size:18px;font-weight:700;">Searching PStream...</div>';
-            TMDb.search(q, state.activeProvider)
+            TMDb.search(q, state.activeProvider || "eng")
                 .then(function (results) {
                     renderSearchResults(results);
-                })
-                .catch(function () {
-                    fetch("/api/search?q=" + encodeURIComponent(q) + "&lang=" + encodeURIComponent(state.activeProvider || "eng"))
-                        .then(function (r) { return r.json(); })
-                        .then(function (results) {
-                            renderSearchResults(results);
-                        });
                 });
         } else {
             container.innerHTML = "";
@@ -2290,38 +2350,25 @@ var App = (function () {
             grid.className = "recommendations-grid";
             grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(215px, 1fr))";
 
-            function renderDefaultSearchItems(items) {
-                grid.innerHTML = "";
-                items.forEach(function (item) {
-                    var card = document.createElement("div");
-                    card.className = "netflix-card";
-                    card.style.flex = "none";
-                    card.style.width = "100%";
-                    card.dataset.id = item.id;
-                    card.dataset.type = item.type;
-                    card.innerHTML =
-                        '<img src="' + (item.poster || 'https://via.placeholder.com/500x750') + '" alt="' + item.title + '">' +
-                        '<div class="card-badge-top-left">' + (item.type === "tv" ? "TV" : "FILM") + '</div>' +
-                        '<div class="card-info-overlay"><div class="card-title-text">' + item.title + '</div></div>';
-                    card.addEventListener("click", function () {
-                        openDetailModal(item.id, item.type);
-                    });
-                    grid.appendChild(card);
-                });
-            }
-
-            TMDb.getFeed("home", state.activeProvider)
+            TMDb.getFeed("home", state.activeProvider || "eng")
                 .then(function (data) {
                     var items = (data && data.categories && data.categories[0] && data.categories[0].items) ? data.categories[0].items : [];
-                    renderDefaultSearchItems(items);
-                })
-                .catch(function () {
-                    fetch("/api/feed?tab=home&lang=" + encodeURIComponent(state.activeProvider || "eng"))
-                        .then(function (r) { return r.json(); })
-                        .then(function (data) {
-                            var items = (data && data.categories && data.categories[0] && data.categories[0].items) ? data.categories[0].items : [];
-                            renderDefaultSearchItems(items);
+                    items.forEach(function (item) {
+                        var card = document.createElement("div");
+                        card.className = "netflix-card";
+                        card.style.flex = "none";
+                        card.style.width = "100%";
+                        card.dataset.id = item.id;
+                        card.dataset.type = item.type;
+                        card.innerHTML =
+                            '<img src="' + (item.poster || PLACEHOLDER_POSTER) + '" alt="' + item.title + '" onerror="this.onerror=null;this.src=\'' + PLACEHOLDER_POSTER + '\';">' +
+                            '<div class="card-badge-top-left">' + (item.type === "tv" ? "TV" : "FILM") + '</div>' +
+                            '<div class="card-info-overlay"><div class="card-title-text">' + item.title + '</div></div>';
+                        card.addEventListener("click", function () {
+                            openDetailModal(item.id, item.type);
                         });
+                        grid.appendChild(card);
+                    });
                 });
 
             section.appendChild(grid);
@@ -2402,6 +2449,76 @@ var App = (function () {
         smoothScrollTimer = requestAnimationFrame(step);
     }
 
+    var modalScrollTimer = null;
+    function smoothScrollModalTo(modalEl, targetY, duration) {
+        if (!modalEl) return;
+        targetY = Math.max(0, Math.round(targetY));
+        var maxScroll = Math.max(0, modalEl.scrollHeight - modalEl.clientHeight);
+        targetY = Math.min(targetY, maxScroll);
+
+        if (!duration) duration = 180;
+        var startY = modalEl.scrollTop;
+        var diff = targetY - startY;
+        if (Math.abs(diff) < 2) {
+            modalEl.scrollTop = targetY;
+            return;
+        }
+
+        if (modalScrollTimer) cancelAnimationFrame(modalScrollTimer);
+
+        var startTime = performance.now();
+        function step(now) {
+            var elapsed = now - startTime;
+            var progress = Math.min(1, elapsed / duration);
+            var ease = 1 - Math.pow(1 - progress, 3);
+            modalEl.scrollTop = Math.round(startY + diff * ease);
+            if (progress < 1) {
+                modalScrollTimer = requestAnimationFrame(step);
+            } else {
+                modalEl.scrollTop = targetY;
+                modalScrollTimer = null;
+            }
+        }
+        modalScrollTimer = requestAnimationFrame(step);
+    }
+
+    var pillScrollTimer = null;
+    function smoothScrollElementX(container, targetX, duration) {
+        if (!container) return;
+        targetX = Math.max(0, Math.round(targetX));
+        var maxScroll = Math.max(0, container.scrollWidth - container.clientWidth);
+        targetX = Math.min(targetX, maxScroll);
+
+        if (!duration) duration = 160;
+        var startX = container.scrollLeft;
+        var diff = targetX - startX;
+        if (Math.abs(diff) < 2) {
+            container.scrollLeft = targetX;
+            return;
+        }
+
+        if (pillScrollTimer) cancelAnimationFrame(pillScrollTimer);
+
+        var startTime = performance.now();
+        function step(now) {
+            var elapsed = now - startTime;
+            var progress = Math.min(1, elapsed / duration);
+            var ease = 1 - Math.pow(1 - progress, 3);
+            container.scrollLeft = Math.round(startX + diff * ease);
+            if (progress < 1) {
+                pillScrollTimer = requestAnimationFrame(step);
+            } else {
+                container.scrollLeft = targetX;
+                pillScrollTimer = null;
+            }
+        }
+        pillScrollTimer = requestAnimationFrame(step);
+    }
+
+    function scrollModalTo(modalEl, targetY) {
+        smoothScrollModalTo(modalEl, targetY, 200);
+    }
+
     function setFocus(el) {
         if (!el) return;
         document.querySelectorAll(".tv-focused").forEach(function (node) {
@@ -2409,6 +2526,48 @@ var App = (function () {
         });
         el.classList.add("tv-focused");
         nav.focusedElement = el;
+
+        var inModal = el.closest ? el.closest("#detail-modal") : null;
+        if (inModal) {
+            // 1. Horizontal Season Carousel Scrolling
+            var pillWrap = el.closest ? el.closest("#modal-season-pills") : null;
+            if (pillWrap) {
+                var pillLeft = el.offsetLeft;
+                var pillWidth = el.offsetWidth;
+                var wrapWidth = pillWrap.clientWidth;
+                var targetX = pillLeft - Math.round((wrapWidth - pillWidth) / 2);
+                smoothScrollElementX(pillWrap, targetX, 160);
+            }
+
+            // 2. Vertical Modal Viewport Scrolling
+            if (el.id === "modal-play-btn" || el.id === "modal-close-btn") {
+                smoothScrollModalTo(inModal, 0, 200);
+            } else if (el.classList.contains("season-pill")) {
+                var pillRect = el.getBoundingClientRect();
+                if (pillRect.top < 80 || pillRect.bottom > window.innerHeight - 80) {
+                    var targetY = inModal.scrollTop + pillRect.top - Math.round(window.innerHeight * 0.38);
+                    smoothScrollModalTo(inModal, targetY, 200);
+                }
+            } else if (el.classList.contains("episode-item")) {
+                var epRect = el.getBoundingClientRect();
+                var desiredEpTop = Math.round((window.innerHeight - epRect.height) / 2);
+                var targetY = inModal.scrollTop + (epRect.top - desiredEpTop);
+                smoothScrollModalTo(inModal, targetY, 180);
+            } else if (el.classList.contains("recommendation-card") || el.classList.contains("rec-card")) {
+                var recRect = el.getBoundingClientRect();
+                var desiredRecTop = Math.round((window.innerHeight - recRect.height) / 2);
+                var targetY = inModal.scrollTop + (recRect.top - desiredRecTop);
+                smoothScrollModalTo(inModal, targetY, 200);
+            } else {
+                var elRect = el.getBoundingClientRect();
+                if (elRect.top < 120 || elRect.bottom > window.innerHeight - 120) {
+                    var desiredTop = Math.round((window.innerHeight - elRect.height) / 2);
+                    var targetY = inModal.scrollTop + (elRect.top - desiredTop);
+                    smoothScrollModalTo(inModal, targetY, 200);
+                }
+            }
+            return;
+        }
 
         if (el.classList.contains("netflix-card")) {
             var carousel = el.closest(".card-carousel");
@@ -2855,24 +3014,56 @@ var App = (function () {
 
     // Modal navigation
     function navigateModal(code, KEY) {
+        var modal = document.getElementById("detail-modal");
+        var closeBtn = document.getElementById("modal-close-btn");
         var playBtn = document.getElementById("modal-play-btn");
         var pills = Array.from(document.querySelectorAll("#modal-season-pills .season-pill"));
         var eps = Array.from(document.querySelectorAll("#modal-episodes-list .episode-item"));
-        var recs = Array.from(document.querySelectorAll("#modal-recs-grid .recommendation-card"));
+        var recs = Array.from(document.querySelectorAll("#modal-recs-grid .recommendation-card, #modal-recs-grid .rec-card"));
+
+        function getRecCols() {
+            if (recs.length < 2) return 1;
+            var r0 = recs[0].getBoundingClientRect();
+            var count = 0;
+            for (var i = 0; i < recs.length; i++) {
+                var ri = recs[i].getBoundingClientRect();
+                if (Math.abs(ri.top - r0.top) < 25) {
+                    count++;
+                } else {
+                    break;
+                }
+            }
+            return Math.max(1, count);
+        }
 
         if (code === KEY.DOWN) {
-            if (modalNav.section === "play") {
+            if (modalNav.section === "close") {
+                modalNav.section = "play";
+                setFocus(playBtn);
+            } else if (modalNav.section === "play") {
                 if (pills.length > 0) {
                     modalNav.section = "seasons";
-                    setFocus(pills[modalNav.seasonIndex]);
+                    setFocus(pills[modalNav.seasonIndex || 0]);
+                } else if (eps.length > 0) {
+                    modalNav.section = "episodes";
+                    modalNav.episodeIndex = 0;
+                    setFocus(eps[0]);
                 } else if (recs.length > 0) {
                     modalNav.section = "recs";
-                    setFocus(recs[modalNav.recIndex]);
+                    modalNav.recIndex = 0;
+                    setFocus(recs[0]);
+                } else {
+                    if (modal) scrollModalTo(modal, modal.scrollTop + 240);
                 }
             } else if (modalNav.section === "seasons") {
                 if (eps.length > 0) {
                     modalNav.section = "episodes";
-                    setFocus(eps[modalNav.episodeIndex]);
+                    modalNav.episodeIndex = 0;
+                    setFocus(eps[0]);
+                } else if (recs.length > 0) {
+                    modalNav.section = "recs";
+                    modalNav.recIndex = 0;
+                    setFocus(recs[0]);
                 }
             } else if (modalNav.section === "episodes") {
                 if (modalNav.episodeIndex < eps.length - 1) {
@@ -2880,48 +3071,100 @@ var App = (function () {
                     setFocus(eps[modalNav.episodeIndex]);
                 } else if (recs.length > 0) {
                     modalNav.section = "recs";
+                    modalNav.recIndex = 0;
+                    setFocus(recs[0]);
+                }
+            } else if (modalNav.section === "recs") {
+                var cols = getRecCols();
+                var nextIdx = modalNav.recIndex + cols;
+                if (nextIdx < recs.length) {
+                    modalNav.recIndex = nextIdx;
                     setFocus(recs[modalNav.recIndex]);
+                } else {
+                    var curRow = Math.floor(modalNav.recIndex / cols);
+                    var maxRow = Math.floor((recs.length - 1) / cols);
+                    if (curRow < maxRow) {
+                        modalNav.recIndex = recs.length - 1;
+                        setFocus(recs[modalNav.recIndex]);
+                    }
                 }
             }
         } else if (code === KEY.UP) {
-            if (modalNav.section === "recs") {
-                if (eps.length > 0) {
-                    modalNav.section = "episodes";
-                    modalNav.episodeIndex = eps.length - 1;
-                    setFocus(eps[modalNav.episodeIndex]);
-                } else {
-                    modalNav.section = "play";
-                    setFocus(playBtn);
-                }
+            if (modalNav.section === "close") {
+                // Top boundary reached
+            } else if (modalNav.section === "play") {
+                modalNav.section = "close";
+                setFocus(closeBtn);
+            } else if (modalNav.section === "seasons") {
+                modalNav.section = "play";
+                setFocus(playBtn);
             } else if (modalNav.section === "episodes") {
                 if (modalNav.episodeIndex > 0) {
                     modalNav.episodeIndex--;
                     setFocus(eps[modalNav.episodeIndex]);
                 } else if (pills.length > 0) {
                     modalNav.section = "seasons";
-                    setFocus(pills[modalNav.seasonIndex]);
+                    setFocus(pills[modalNav.seasonIndex || 0]);
+                } else {
+                    modalNav.section = "play";
+                    setFocus(playBtn);
                 }
-            } else if (modalNav.section === "seasons") {
-                modalNav.section = "play";
-                setFocus(playBtn);
+            } else if (modalNav.section === "recs") {
+                var cols = getRecCols();
+                if (modalNav.recIndex >= cols) {
+                    modalNav.recIndex -= cols;
+                    setFocus(recs[modalNav.recIndex]);
+                } else {
+                    if (eps.length > 0) {
+                        modalNav.section = "episodes";
+                        modalNav.episodeIndex = eps.length - 1;
+                        setFocus(eps[modalNav.episodeIndex]);
+                    } else if (pills.length > 0) {
+                        modalNav.section = "seasons";
+                        setFocus(pills[modalNav.seasonIndex || 0]);
+                    } else {
+                        modalNav.section = "play";
+                        setFocus(playBtn);
+                    }
+                }
             }
         } else if (code === KEY.LEFT) {
-            if (modalNav.section === "seasons" && modalNav.seasonIndex > 0) {
-                modalNav.seasonIndex--;
-                setFocus(pills[modalNav.seasonIndex]);
-                pills[modalNav.seasonIndex].click();
-            } else if (modalNav.section === "recs" && modalNav.recIndex > 0) {
-                modalNav.recIndex--;
-                setFocus(recs[modalNav.recIndex]);
+            if (modalNav.section === "close") {
+                // Stay on close
+            } else if (modalNav.section === "play") {
+                // Stay on play
+            } else if (modalNav.section === "seasons") {
+                if (modalNav.seasonIndex > 0) {
+                    modalNav.seasonIndex--;
+                    setFocus(pills[modalNav.seasonIndex]);
+                    pills[modalNav.seasonIndex].click();
+                }
+            } else if (modalNav.section === "episodes") {
+                // Stay on episode
+            } else if (modalNav.section === "recs") {
+                if (modalNav.recIndex > 0) {
+                    modalNav.recIndex--;
+                    setFocus(recs[modalNav.recIndex]);
+                }
             }
         } else if (code === KEY.RIGHT) {
-            if (modalNav.section === "seasons" && modalNav.seasonIndex < pills.length - 1) {
-                modalNav.seasonIndex++;
-                setFocus(pills[modalNav.seasonIndex]);
-                pills[modalNav.seasonIndex].click();
-            } else if (modalNav.section === "recs" && modalNav.recIndex < recs.length - 1) {
-                modalNav.recIndex++;
-                setFocus(recs[modalNav.recIndex]);
+            if (modalNav.section === "close") {
+                // Stay on close
+            } else if (modalNav.section === "play") {
+                // Stay on play
+            } else if (modalNav.section === "seasons") {
+                if (modalNav.seasonIndex < pills.length - 1) {
+                    modalNav.seasonIndex++;
+                    setFocus(pills[modalNav.seasonIndex]);
+                    pills[modalNav.seasonIndex].click();
+                }
+            } else if (modalNav.section === "episodes") {
+                // Stay on episode
+            } else if (modalNav.section === "recs") {
+                if (modalNav.recIndex < recs.length - 1) {
+                    modalNav.recIndex++;
+                    setFocus(recs[modalNav.recIndex]);
+                }
             }
         }
     }
