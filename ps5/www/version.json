@@ -1,9 +1,9 @@
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "name": "PStream PS5 Standalone",
   "release_date": "2026-10-06",
   "min_firmware": "3.00",
   "max_firmware": "13.60+",
   "repository": "https://github.com/ducky-ux1/PStream",
-  "changelog": "v1.0.1: Widescreen multi-tab Settings overhaul, Streamflix Left Sidebar layout toggle, 5 Color Accent themes, 2D D-Pad directional navigation fix, search bar overlap and focus trapping resolution."
+  "changelog": "v1.0.2: Settings converted to a full Tab view (not a popup modal); global theme accents across all cards, focus rings, buttons, and progress meters; Netflix TV dedicated Search screen with on-screen D-pad keyboard, instant suggestions, and live results grid; fixed DualSense R2 trigger tab-cycle conflict; fixed player error dialog navigation (Retry, Provider Settings, Exit); fixed Settings D-pad navigation straight-down jumping."
 }

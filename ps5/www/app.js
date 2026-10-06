@@ -47,7 +47,8 @@ var App = (function () {
         savedResumeTime: 0,
         aspectMode: "contain", // "contain" | "cover" | "fill"
         autoplayDismissed: false,
-        inSearch: false
+        inSearch: false,
+        searchQuery: ""
     };
 
     // TV Spatial Navigation Coordinates
@@ -898,6 +899,7 @@ var App = (function () {
         if (!modal) return;
         if (text) text.innerText = msg;
         modal.style.display = "flex";
+        state.view = "player_error";
         var retry = document.getElementById("player-error-retry");
         if (retry) setFocus(retry);
     }
@@ -1364,25 +1366,39 @@ var App = (function () {
         closeSettingsModal();
     }
 
-    function openSettingsModal() {
-        var modal = document.getElementById("settings-modal");
-        if (!modal) return;
-        modal.style.display = "flex";
-        state.view = "settings_modal";
+    function openSettingsView() {
+        state.view = "settings";
+        state.currentTab = "settings";
+        updateTabUI("settings");
+
+        var billboard = document.getElementById("billboard-section");
+        var continueSec = document.getElementById("continue-watching-section");
+        var catalogRows = document.getElementById("catalog-rows");
+        var searchView = document.getElementById("search-view");
+        var settingsView = document.getElementById("settings-view");
+
+        if (billboard) billboard.style.display = "none";
+        if (continueSec) continueSec.style.display = "none";
+        if (catalogRows) catalogRows.style.display = "none";
+        if (searchView) searchView.style.display = "none";
+        if (settingsView) settingsView.style.display = "block";
+
+        window.scrollTo(0, 0);
+        nav.tier = "settings";
         nav.settingsTier = "tabs";
         updateSettingsPills();
-        switchSettingsTab("general");
-        var firstTab = document.querySelector("#settings-nav-sidebar .settings-nav-tab");
+        switchSettingsTab(state.settingsTab || "general");
+        var firstTab = document.querySelector("#settings-nav-sidebar .settings-nav-tab.active") || document.querySelector("#settings-nav-sidebar .settings-nav-tab");
         if (firstTab) setFocus(firstTab);
     }
 
+    function openSettingsModal() {
+        openSettingsView();
+    }
+
     function closeSettingsModal() {
-        var modal = document.getElementById("settings-modal");
-        if (modal) modal.style.display = "none";
-        if (state.view === "settings_modal") {
-            state.view = "browse";
-            focusBillboardPlay();
-        }
+        loadTabFeed("home");
+        focusBillboardPlay();
     }
 
     function updateSettingsPills() {
@@ -1589,27 +1605,36 @@ var App = (function () {
 
         var billboard = document.getElementById("billboard-section");
         var continueSec = document.getElementById("continue-watching-section");
+        var catalogRows = document.getElementById("catalog-rows");
+        var searchView = document.getElementById("search-view");
+        var settingsView = document.getElementById("settings-view");
 
         if (tabName === "search") {
-            state.inSearch = true;
+            state.view = "search";
             if (billboard) billboard.style.display = "none";
             if (continueSec) continueSec.style.display = "none";
+            if (catalogRows) catalogRows.style.display = "none";
+            if (settingsView) settingsView.style.display = "none";
             window.scrollTo(0, 0);
             openSearchView();
             return;
         }
 
-        state.inSearch = false;
-        var searchInput = document.getElementById("search-input");
-        if (searchInput && searchInput.value) {
-            searchInput.value = "";
-            updateSearchClearBtn();
-        }
-
         if (tabName === "settings") {
-            openSettingsModal();
+            state.view = "settings";
+            if (billboard) billboard.style.display = "none";
+            if (continueSec) continueSec.style.display = "none";
+            if (catalogRows) catalogRows.style.display = "none";
+            if (searchView) searchView.style.display = "none";
+            window.scrollTo(0, 0);
+            openSettingsView();
             return;
         }
+
+        state.view = "browse";
+        if (searchView) searchView.style.display = "none";
+        if (settingsView) settingsView.style.display = "none";
+        if (catalogRows) catalogRows.style.display = "block";
 
         if (tabName === "list") {
             if (billboard) billboard.style.display = "none";
@@ -1618,7 +1643,7 @@ var App = (function () {
             return;
         }
 
-        if (billboard) billboard.style.display = "";
+        if (billboard) billboard.style.display = (tabName === "home") ? "" : "none";
         if (continueSec) continueSec.style.display = "";
 
         var container = document.getElementById("catalog-rows");
@@ -2248,12 +2273,32 @@ var App = (function () {
             bannerUpdateBtn.onclick = applyAppUpdate;
         }
 
-        var bannerDismissBtn = document.getElementById("update-banner-dismiss");
-        if (bannerDismissBtn) {
-            bannerDismissBtn.onclick = function () {
-                state.updateBannerDismissed = true;
-                var banner = document.getElementById("pstream-update-banner");
-                if (banner) banner.style.display = "none";
+        // Netflix OSK Keys Wiring
+        document.querySelectorAll("#netflix-osk .osk-key").forEach(function (btn) {
+            btn.onclick = function () {
+                handleOskKeyPress(btn.dataset.key);
+            };
+        });
+
+        // Search Suggestions Wiring
+        document.querySelectorAll("#search-suggestions-list .search-suggest-item").forEach(function (btn) {
+            btn.onclick = function () {
+                selectSearchSuggestion(btn.dataset.query || btn.innerText.trim());
+            };
+        });
+
+        var searchBackBtn = document.getElementById("search-back-browse-btn");
+        if (searchBackBtn) {
+            searchBackBtn.onclick = function () {
+                loadTabFeed("home");
+                focusBillboardPlay();
+            };
+        }
+
+        var searchClearAll = document.getElementById("search-clear-all-btn");
+        if (searchClearAll) {
+            searchClearAll.onclick = function () {
+                clearSearchQuery();
             };
         }
     }
@@ -2371,33 +2416,120 @@ var App = (function () {
             });
     }
 
-    function renderSearchResults(data) {
-        var container = document.getElementById("catalog-rows");
-        container.innerHTML = "";
+    var searchDebounceTimer = null;
 
-        // Hide billboard and continue watching so search results are at the very top!
-        var billboard = document.getElementById("billboard-section");
-        if (billboard) billboard.style.display = "none";
-        var continueSec = document.getElementById("continue-watching-section");
-        if (continueSec) continueSec.style.display = "none";
-        window.scrollTo(0, 0);
+    function handleOskKeyPress(key) {
+        if (!state.searchQuery) state.searchQuery = "";
 
-        var results = (data && data.results) ? data.results : (Array.isArray(data) ? data : []);
+        if (key === "backspace") {
+            state.searchQuery = state.searchQuery.slice(0, -1);
+        } else if (key === " ") {
+            if (state.searchQuery.length > 0 && !state.searchQuery.endsWith(" ")) {
+                state.searchQuery += " ";
+            }
+        } else if (key) {
+            state.searchQuery += key;
+        }
 
-        var section = document.createElement("section");
-        section.className = "shelf-section";
-        section.style.paddingTop = "10px";
-        section.innerHTML = '<h2 class="shelf-title" style="margin-bottom:20px;"><span>Search Results</span></h2>';
+        updateSearchQueryUI();
+        triggerSearchQuery();
+    }
 
-        if (!results || results.length === 0) {
-            section.innerHTML += '<div style="color:#808080;padding:30px;font-size:18px;font-weight:600;">No titles found. Try another search term.</div>';
-            container.appendChild(section);
+    function selectSearchSuggestion(query) {
+        state.searchQuery = query;
+        updateSearchQueryUI();
+        triggerSearchQuery(true);
+    }
+
+    function clearSearchQuery() {
+        state.searchQuery = "";
+        updateSearchQueryUI();
+        loadPopularSearchFeed();
+        var keyA = document.querySelector(".osk-key[data-key='a']");
+        if (keyA) setFocus(keyA);
+    }
+
+    function updateSearchQueryUI() {
+        var queryVal = document.getElementById("search-query-value");
+        var clearBtn = document.getElementById("search-clear-all-btn");
+        if (queryVal) {
+            queryVal.innerText = state.searchQuery || "";
+        }
+        if (clearBtn) {
+            clearBtn.style.display = (state.searchQuery && state.searchQuery.length > 0) ? "inline-block" : "none";
+        }
+    }
+
+    function triggerSearchQuery(immediate) {
+        if (searchDebounceTimer) {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = null;
+        }
+
+        var q = (state.searchQuery || "").trim();
+        if (q.length === 0) {
+            loadPopularSearchFeed();
             return;
         }
 
-        var grid = document.createElement("div");
-        grid.className = "recommendations-grid";
-        grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(215px, 1fr))";
+        var doSearch = function () {
+            var grid = document.getElementById("search-results-grid");
+            if (grid) {
+                grid.innerHTML = '<div style="color:#808080;padding:40px;font-size:18px;font-weight:600;grid-column:1/-1;">Searching for "' + q + '"...</div>';
+            }
+            TMDb.search(q, state.activeProvider || "eng")
+                .then(function (results) {
+                    renderSearchResultsGrid(results);
+                })
+                .catch(function (err) {
+                    log("Search error: " + err);
+                    if (grid) {
+                        grid.innerHTML = '<div style="color:#e50914;padding:40px;font-size:18px;font-weight:600;grid-column:1/-1;">Search request failed. Please check network.</div>';
+                    }
+                });
+        };
+
+        if (immediate) {
+            doSearch();
+        } else {
+            searchDebounceTimer = setTimeout(doSearch, 220);
+        }
+    }
+
+    function loadPopularSearchFeed() {
+        var grid = document.getElementById("search-results-grid");
+        if (!grid) return;
+        grid.innerHTML = '<div style="color:#808080;padding:40px;font-size:18px;font-weight:600;grid-column:1/-1;">Loading popular titles...</div>';
+
+        TMDb.getFeed("home", state.activeProvider || "eng")
+            .then(function (data) {
+                var items = [];
+                if (data && data.categories && data.categories.length > 0) {
+                    items = data.categories[0].items || [];
+                }
+                renderSearchResultsGrid(items);
+            })
+            .catch(function (err) {
+                log("Error loading popular feed for search: " + err);
+            });
+    }
+
+    function renderSearchResultsGrid(data) {
+        var grid = document.getElementById("search-results-grid");
+        var headerVal = document.getElementById("search-query-value");
+        if (!grid) return;
+        grid.innerHTML = "";
+
+        var results = (data && data.results) ? data.results : (Array.isArray(data) ? data : []);
+
+        if (headerVal && state.searchQuery) {
+            headerVal.innerText = state.searchQuery;
+        }
+
+        if (!results || results.length === 0) {
+            grid.innerHTML = '<div style="color:#808080;padding:40px;font-size:18px;font-weight:600;grid-column:1/-1;">No matching titles found. Try another search term.</div>';
+            return;
+        }
 
         results.forEach(function (item) {
             var card = document.createElement("div");
@@ -2420,110 +2552,45 @@ var App = (function () {
 
             grid.appendChild(card);
         });
-
-        section.appendChild(grid);
-        container.appendChild(section);
     }
 
     function openSearchView() {
-        var container = document.getElementById("catalog-rows");
+        state.view = "search";
+        state.currentTab = "search";
+        updateTabUI("search");
+
         var billboard = document.getElementById("billboard-section");
         var continueSec = document.getElementById("continue-watching-section");
+        var catalogRows = document.getElementById("catalog-rows");
+        var searchView = document.getElementById("search-view");
+        var settingsView = document.getElementById("settings-view");
+
         if (billboard) billboard.style.display = "none";
         if (continueSec) continueSec.style.display = "none";
+        if (catalogRows) catalogRows.style.display = "none";
+        if (settingsView) settingsView.style.display = "none";
+        if (searchView) searchView.style.display = "block";
+
         window.scrollTo(0, 0);
+        nav.tier = "search";
 
-        var searchInput = document.getElementById("search-input");
-        var q = searchInput ? searchInput.value.trim() : "";
+        updateSearchQueryUI();
 
-        if (q.length > 0) {
-            container.innerHTML = '<div style="text-align:center;padding:50px;color:#808080;font-size:18px;font-weight:700;">Searching PStream...</div>';
-            TMDb.search(q, state.activeProvider || "eng")
-                .then(function (results) {
-                    renderSearchResults(results);
-                });
+        if (state.searchQuery && state.searchQuery.trim().length > 0) {
+            triggerSearchQuery(true);
         } else {
-            container.innerHTML = "";
-            var section = document.createElement("section");
-            section.className = "shelf-section";
-            section.style.paddingTop = "10px";
-            section.innerHTML = 
-                '<h2 class="shelf-title" style="margin-bottom:12px;"><span>Search Movies, Series & Anime</span></h2>' +
-                '<p style="color:#8e8e8e;font-size:16px;margin-bottom:24px;font-weight:600;">Type in the search bar above using the on-screen keyboard, or browse popular titles below.</p>';
-
-            var grid = document.createElement("div");
-            grid.className = "recommendations-grid";
-            grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(215px, 1fr))";
-
-            TMDb.getFeed("home", state.activeProvider || "eng")
-                .then(function (data) {
-                    var items = (data && data.categories && data.categories[0] && data.categories[0].items) ? data.categories[0].items : [];
-                    items.forEach(function (item) {
-                        var card = document.createElement("div");
-                        card.className = "netflix-card";
-                        card.style.flex = "none";
-                        card.style.width = "100%";
-                        card.dataset.id = item.id;
-                        card.dataset.type = item.type;
-                        card.innerHTML =
-                            '<img src="' + (item.poster || PLACEHOLDER_POSTER) + '" alt="' + item.title + '" onerror="this.onerror=null;this.src=\'' + PLACEHOLDER_POSTER + '\';">' +
-                            '<div class="card-badge-top-left">' + (item.type === "tv" ? "TV" : "FILM") + '</div>' +
-                            '<div class="card-info-overlay"><div class="card-title-text">' + item.title + '</div></div>';
-                        card.addEventListener("click", function () {
-                            openDetailModal(item.id, item.type);
-                        });
-                        grid.appendChild(card);
-                    });
-                });
-
-            section.appendChild(grid);
-            container.appendChild(section);
+            loadPopularSearchFeed();
         }
 
-        if (searchInput) {
-            setFocus(searchInput);
-            searchInput.focus();
-            if (searchInput.value.length > 0) {
-                try { searchInput.select(); } catch (e) { }
-            }
-            nav.tier = "search";
-        }
+        var keyA = document.querySelector(".osk-key[data-key='a']");
+        if (keyA) setFocus(keyA);
     }
 
     function clearSearch() {
-        var searchInput = document.getElementById("search-input");
-        if (searchInput) {
-            searchInput.value = "";
-        }
-        updateSearchClearBtn();
-        if (state.currentTab === "search") {
-            openSearchView();
-        } else if (state.inSearch) {
-            state.inSearch = false;
-            loadTabFeed(state.currentTab || "home");
-        }
+        clearSearchQuery();
     }
 
-    function updateSearchClearBtn() {
-        var clearBtn = document.getElementById("search-clear-btn");
-        var searchInput = document.getElementById("search-input");
-        if (clearBtn && searchInput) {
-            clearBtn.style.display = searchInput.value.length > 0 ? "block" : "none";
-        }
-    }
-
-    window.onSearchCommit = function () {
-        setTimeout(function () {
-            var searchGrid = document.querySelector("#catalog-rows .recommendations-grid");
-            var firstCard = searchGrid ? searchGrid.querySelector(".netflix-card") : null;
-            if (firstCard) {
-                nav.tier = "shelves";
-                nav.shelfIndex = 0;
-                nav.cardIndex = 0;
-                setFocus(firstCard);
-            }
-        }, 150);
-    };
+    window.onSearchCommit = function () {};
 
     // ==========================================
     // PlayStation Focus Engine (Silky-Smooth Instant TV Navigation)
@@ -2785,10 +2852,7 @@ var App = (function () {
 
         // 2. L1 / R1 Shoulder Buttons -> Tab Cycling
         if (code === KEY.L1) {
-            if (state.view === "browse") {
-                cycleTabs(-1);
-            } else if (state.view === "settings_modal") {
-                closeSettingsModal();
+            if (state.view === "browse" || state.view === "search" || state.view === "settings") {
                 cycleTabs(-1);
             } else if (state.view === "detail") {
                 closeDetailModal();
@@ -2800,10 +2864,7 @@ var App = (function () {
         }
 
         if (code === KEY.R1) {
-            if (state.view === "browse") {
-                cycleTabs(1);
-            } else if (state.view === "settings_modal") {
-                closeSettingsModal();
+            if (state.view === "browse" || state.view === "search" || state.view === "settings") {
                 cycleTabs(1);
             } else if (state.view === "detail") {
                 closeDetailModal();
@@ -2816,12 +2877,24 @@ var App = (function () {
 
         // 3. Circle (O) -> Back / Close
         if (code === KEY.CIRCLE) {
-            if (state.view === "context") {
+            if (state.view === "player_error") {
+                hideErrorModal();
+                exitPlayer();
+            } else if (state.view === "context") {
                 closeCardContextMenu();
             } else if (state.view === "provider_modal") {
                 closeProviderWelcomeModal();
-            } else if (state.view === "settings_modal") {
-                closeSettingsModal();
+            } else if (state.view === "search") {
+                if (state.searchQuery && state.searchQuery.length > 0) {
+                    var bs = document.querySelector(".osk-key-backspace");
+                    if (bs) bs.click();
+                } else {
+                    loadTabFeed("home");
+                    focusBillboardPlay();
+                }
+            } else if (state.view === "settings") {
+                loadTabFeed("home");
+                focusBillboardPlay();
             } else if (state.view === "drawer_episodes") {
                 closeEpisodesDrawer();
             } else if (state.view === "drawer_audio") {
@@ -2830,8 +2903,7 @@ var App = (function () {
                 closeDetailModal();
             } else if (state.view === "player") {
                 exitPlayer();
-            } else if (state.view === "browse" && (state.currentTab === "search" || state.inSearch || (document.getElementById("search-input") && document.getElementById("search-input").value))) {
-                clearSearch();
+            } else if (state.view === "browse" && state.currentTab !== "home") {
                 loadTabFeed("home");
                 focusBillboardPlay();
             }
@@ -2840,22 +2912,19 @@ var App = (function () {
 
         // 4. Triangle -> Quick Search Tab
         if (code === KEY.TRIANGLE) {
-            if (state.view === "browse") {
+            if (state.view === "browse" || state.view === "settings") {
                 loadTabFeed("search");
+            } else if (state.view === "search") {
+                var bsTri = document.querySelector(".osk-key-backspace");
+                if (bsTri) bsTri.click();
             }
             return;
         }
 
         // 5. Cross (X) -> Select / Activate
         if (code === KEY.CROSS) {
-            if (nav.tier === "search") {
-                var sInCross = document.getElementById("search-input");
-                if (sInCross) {
-                    sInCross.focus();
-                    if (sInCross.value.length > 0) {
-                        try { sInCross.select(); } catch (e) { }
-                    }
-                }
+            if (state.view === "player_error") {
+                if (nav.focusedElement) nav.focusedElement.click();
                 return;
             }
 
@@ -2885,6 +2954,12 @@ var App = (function () {
             else if (code === KEY.DOWN) navigateBrowse("DOWN");
             else if (code === KEY.LEFT) navigateBrowse("LEFT");
             else if (code === KEY.RIGHT) navigateBrowse("RIGHT");
+        } else if (state.view === "search") {
+            navigateSearchView(code, KEY);
+        } else if (state.view === "settings") {
+            navigateSettingsView(code, KEY);
+        } else if (state.view === "player_error") {
+            navigatePlayerError(code, KEY);
         } else if (state.view === "player") {
             navigatePlayer(code, KEY);
         } else if (state.view === "detail") {
@@ -2897,13 +2972,11 @@ var App = (function () {
             navigateDrawerAudio(code, KEY);
         } else if (state.view === "provider_modal") {
             navigateModalGeneric(code, KEY);
-        } else if (state.view === "settings_modal") {
-            navigateSettingsModal(code, KEY);
         }
     }
 
     function cycleTabs(dir) {
-        var contentTabs = ["search", "home", "movies", "tv", "anime", "list"];
+        var contentTabs = ["search", "home", "movies", "tv", "anime", "list", "settings"];
         var idx = contentTabs.indexOf(state.currentTab);
         if (idx === -1) idx = 1;
         var nextIdx = (idx + dir + contentTabs.length) % contentTabs.length;
@@ -2941,41 +3014,25 @@ var App = (function () {
                         nav.tabIndex--;
                         setFocus(tabs[nav.tabIndex]);
                     }
-                } else {
-                    // Navigate UP from tabs into search input (visual focus only)
-                    nav.tier = "search";
-                    var sInput = document.getElementById("search-input");
-                    if (sInput) setFocus(sInput);
                 }
             }
         } else if (dir === "DOWN") {
-            if (nav.tier === "search") {
-                var searchGrid = document.querySelector("#catalog-rows .recommendations-grid");
-                var searchCards = searchGrid ? Array.from(searchGrid.querySelectorAll(".netflix-card")) : [];
-                var activeIn = document.getElementById("search-input");
-                if (activeIn) activeIn.blur();
-                if (searchCards.length > 0) {
-                    nav.tier = "shelves";
-                    nav.shelfIndex = 0;
-                    nav.cardIndex = 0;
-                    setFocus(searchCards[0]);
-                } else {
-                    nav.tier = "tabs";
-                    if (tabs[nav.tabIndex]) setFocus(tabs[nav.tabIndex]);
-                }
-            } else if (nav.tier === "tabs") {
+            if (nav.tier === "tabs") {
                 if (state.layout === "sidebar") {
                     if (nav.tabIndex < tabs.length - 1) {
                         nav.tabIndex++;
                         setFocus(tabs[nav.tabIndex]);
-                    } else {
-                        // In sidebar, move down from last tab to search bar
-                        nav.tier = "search";
-                        var sInSide = document.getElementById("search-input");
-                        if (sInSide) setFocus(sInSide);
                     }
                 } else {
-                    focusBillboardPlay();
+                    var activeTab = tabs[nav.tabIndex] ? tabs[nav.tabIndex].dataset.tab : "home";
+                    if (activeTab === "home") {
+                        focusBillboardPlay();
+                    } else if (shelves.length > 0) {
+                        nav.tier = "shelves";
+                        nav.shelfIndex = 0;
+                        nav.cardIndex = 0;
+                        focusCardInShelf(shelves[0], 0);
+                    }
                 }
             } else if (nav.tier === "billboard") {
                 var contSecDown = document.getElementById("continue-watching-section");
@@ -3000,13 +3057,7 @@ var App = (function () {
                 }
             }
         } else if (dir === "LEFT") {
-            if (nav.tier === "search") {
-                var inEl = document.getElementById("search-input");
-                if (inEl) inEl.blur();
-                nav.tier = "tabs";
-                nav.tabIndex = tabs.length - 1; // Navigates back to Settings tab!
-                if (tabs[nav.tabIndex]) setFocus(tabs[nav.tabIndex]);
-            } else if (nav.tier === "tabs") {
+            if (nav.tier === "tabs") {
                 if (state.layout !== "sidebar") {
                     if (nav.tabIndex > 0) {
                         nav.tabIndex--;
@@ -3042,11 +3093,6 @@ var App = (function () {
                     if (nav.tabIndex < tabs.length - 1) {
                         nav.tabIndex++;
                         setFocus(tabs[nav.tabIndex]);
-                    } else {
-                        // Navigate RIGHT past tabs into search input (visual highlight without stealing typing focus)
-                        nav.tier = "search";
-                        var sIn = document.getElementById("search-input");
-                        if (sIn) setFocus(sIn);
                     }
                 }
             } else if (nav.tier === "billboard") {
@@ -3377,41 +3423,243 @@ var App = (function () {
         }
     }
 
-    function navigateSettingsModal(code, KEY) {
+    function navigatePlayerError(code, KEY) {
+        var errBtns = [
+            document.getElementById("player-error-retry"),
+            document.getElementById("player-error-settings"),
+            document.getElementById("player-error-exit")
+        ].filter(Boolean);
+        if (errBtns.length === 0) return;
+
+        var currIdx = errBtns.indexOf(nav.focusedElement);
+        if (currIdx === -1) currIdx = 0;
+
+        if (code === KEY.LEFT) {
+            var prev = (currIdx - 1 + errBtns.length) % errBtns.length;
+            setFocus(errBtns[prev]);
+        } else if (code === KEY.RIGHT) {
+            var next = (currIdx + 1) % errBtns.length;
+            setFocus(errBtns[next]);
+        } else if (code === KEY.CROSS) {
+            if (nav.focusedElement) nav.focusedElement.click();
+        } else if (code === KEY.CIRCLE) {
+            hideErrorModal();
+            exitPlayer();
+        }
+    }
+
+    function navigateSearchView(code, KEY) {
+        var backBtn = document.getElementById("search-back-browse-btn");
+        var oskKeys = Array.from(document.querySelectorAll("#netflix-osk .osk-key"));
+        var suggestions = Array.from(document.querySelectorAll("#search-suggestions-list .search-suggest-item"));
+        var resultCards = Array.from(document.querySelectorAll("#search-results-grid .netflix-card"));
+
+        // Zone 1: Back to Browse Button
+        if (nav.focusedElement === backBtn) {
+            if (code === KEY.UP) {
+                if (state.layout !== "sidebar") {
+                    nav.tier = "tabs";
+                    var searchTab = document.querySelector("#nav-tabs .nav-tab[data-tab='search']");
+                    if (searchTab) setFocus(searchTab);
+                }
+            } else if (code === KEY.DOWN) {
+                var spaceKey = document.querySelector(".osk-key-space");
+                if (spaceKey) setFocus(spaceKey);
+            } else if (code === KEY.RIGHT) {
+                if (resultCards.length > 0) setFocus(resultCards[0]);
+            } else if (code === KEY.CROSS || code === KEY.CIRCLE) {
+                loadTabFeed("home");
+                focusBillboardPlay();
+            }
+            return;
+        }
+
+        // Zone 2: Suggestions List
+        var suggIdx = suggestions.indexOf(nav.focusedElement);
+        if (suggIdx !== -1) {
+            if (code === KEY.UP) {
+                if (suggIdx === 0) {
+                    var key0 = document.querySelector(".osk-key[data-key='0']");
+                    if (key0) setFocus(key0);
+                } else {
+                    setFocus(suggestions[suggIdx - 1]);
+                }
+            } else if (code === KEY.DOWN) {
+                if (suggIdx < suggestions.length - 1) {
+                    setFocus(suggestions[suggIdx + 1]);
+                }
+            } else if (code === KEY.RIGHT) {
+                if (resultCards.length > 0) setFocus(resultCards[0]);
+            } else if (code === KEY.LEFT) {
+                if (state.layout === "sidebar") {
+                    nav.tier = "tabs";
+                    var searchTab2 = document.querySelector("#nav-tabs .nav-tab[data-tab='search']");
+                    if (searchTab2) setFocus(searchTab2);
+                }
+            } else if (code === KEY.CROSS) {
+                nav.focusedElement.click();
+            } else if (code === KEY.CIRCLE) {
+                var keyA = document.querySelector(".osk-key[data-key='a']");
+                if (keyA) setFocus(keyA);
+            }
+            return;
+        }
+
+        // Zone 3: Results Grid Cards
+        var cardIdx = resultCards.indexOf(nav.focusedElement);
+        if (cardIdx !== -1) {
+            var numCols = 4;
+            if (code === KEY.LEFT) {
+                if (cardIdx % numCols === 0) {
+                    var targetKey = document.querySelector(".osk-key[data-key='a']");
+                    if (targetKey) setFocus(targetKey);
+                } else {
+                    setFocus(resultCards[cardIdx - 1]);
+                }
+            } else if (code === KEY.RIGHT) {
+                if (cardIdx + 1 < resultCards.length) {
+                    setFocus(resultCards[cardIdx + 1]);
+                }
+            } else if (code === KEY.UP) {
+                if (cardIdx - numCols >= 0) {
+                    setFocus(resultCards[cardIdx - numCols]);
+                } else if (state.layout !== "sidebar") {
+                    nav.tier = "tabs";
+                    var searchTab3 = document.querySelector("#nav-tabs .nav-tab[data-tab='search']");
+                    if (searchTab3) setFocus(searchTab3);
+                }
+            } else if (code === KEY.DOWN) {
+                if (cardIdx + numCols < resultCards.length) {
+                    setFocus(resultCards[cardIdx + numCols]);
+                }
+            } else if (code === KEY.CROSS) {
+                nav.focusedElement.click();
+            } else if (code === KEY.OPTIONS || code === KEY.SQUARE) {
+                var card = nav.focusedElement;
+                if (card.dataset.id && card.dataset.type) {
+                    openCardContextMenu(card);
+                }
+            } else if (code === KEY.CIRCLE) {
+                var keyBack = document.querySelector(".osk-key[data-key='a']");
+                if (keyBack) setFocus(keyBack);
+            }
+            return;
+        }
+
+        // Zone 4: Virtual Keyboard
+        var oskIdx = oskKeys.indexOf(nav.focusedElement);
+        if (oskIdx !== -1) {
+            var isSpace = nav.focusedElement.classList.contains("osk-key-space");
+            var isBackspace = nav.focusedElement.classList.contains("osk-key-backspace");
+
+            if (isSpace || isBackspace) {
+                // Row 0
+                if (code === KEY.UP) {
+                    if (backBtn) setFocus(backBtn);
+                } else if (code === KEY.DOWN) {
+                    var keyTarget = isSpace ? document.querySelector(".osk-key[data-key='b']") : document.querySelector(".osk-key[data-key='e']");
+                    if (keyTarget) setFocus(keyTarget);
+                } else if (code === KEY.LEFT) {
+                    if (isBackspace) {
+                        var sp = document.querySelector(".osk-key-space");
+                        if (sp) setFocus(sp);
+                    } else if (state.layout === "sidebar") {
+                        nav.tier = "tabs";
+                        var sTab = document.querySelector("#nav-tabs .nav-tab[data-tab='search']");
+                        if (sTab) setFocus(sTab);
+                    }
+                } else if (code === KEY.RIGHT) {
+                    if (isSpace) {
+                        var bs = document.querySelector(".osk-key-backspace");
+                        if (bs) setFocus(bs);
+                    } else {
+                        if (resultCards.length > 0) setFocus(resultCards[0]);
+                    }
+                } else if (code === KEY.CROSS) {
+                    nav.focusedElement.click();
+                } else if (code === KEY.CIRCLE) {
+                    if (state.searchQuery && state.searchQuery.length > 0) {
+                        var bs2 = document.querySelector(".osk-key-backspace");
+                        if (bs2) bs2.click();
+                    } else {
+                        loadTabFeed("home");
+                        focusBillboardPlay();
+                    }
+                }
+                return;
+            }
+
+            // Rows 1-6 (letters and numbers)
+            var keyLetterIdx = oskIdx - 2; // 0 to 35
+            var row = Math.floor(keyLetterIdx / 6) + 1; // 1 to 6
+            var col = keyLetterIdx % 6; // 0 to 5
+
+            if (code === KEY.UP) {
+                if (row === 1) {
+                    var topKey = (col < 3) ? document.querySelector(".osk-key-space") : document.querySelector(".osk-key-backspace");
+                    if (topKey) setFocus(topKey);
+                } else {
+                    var prevKeyIdx = 2 + (row - 2) * 6 + col;
+                    if (oskKeys[prevKeyIdx]) setFocus(oskKeys[prevKeyIdx]);
+                }
+            } else if (code === KEY.DOWN) {
+                if (row === 6) {
+                    if (suggestions.length > 0) setFocus(suggestions[0]);
+                } else {
+                    var nextKeyIdx = 2 + row * 6 + col;
+                    if (oskKeys[nextKeyIdx]) setFocus(oskKeys[nextKeyIdx]);
+                }
+            } else if (code === KEY.LEFT) {
+                if (col === 0) {
+                    if (state.layout === "sidebar") {
+                        nav.tier = "tabs";
+                        var sTab2 = document.querySelector("#nav-tabs .nav-tab[data-tab='search']");
+                        if (sTab2) setFocus(sTab2);
+                    }
+                } else {
+                    if (oskKeys[oskIdx - 1]) setFocus(oskKeys[oskIdx - 1]);
+                }
+            } else if (code === KEY.RIGHT) {
+                if (col === 5) {
+                    if (resultCards.length > 0) setFocus(resultCards[0]);
+                } else {
+                    if (oskKeys[oskIdx + 1]) setFocus(oskKeys[oskIdx + 1]);
+                }
+            } else if (code === KEY.CROSS) {
+                nav.focusedElement.click();
+            } else if (code === KEY.CIRCLE) {
+                if (state.searchQuery && state.searchQuery.length > 0) {
+                    var bs3 = document.querySelector(".osk-key-backspace");
+                    if (bs3) bs3.click();
+                } else {
+                    loadTabFeed("home");
+                    focusBillboardPlay();
+                }
+            }
+            return;
+        }
+
+        var keyA2 = document.querySelector(".osk-key[data-key='a']");
+        if (keyA2) setFocus(keyA2);
+    }
+
+    function navigateSettingsView(code, KEY) {
         var sidebarTabs = Array.from(document.querySelectorAll("#settings-nav-sidebar .settings-nav-tab"));
         var activePanel = document.getElementById("settings-panel-" + (state.settingsTab || "general"));
         if (!activePanel) return;
 
-        // Group interactive buttons in the active panel by their row container
-        var rowContainers = Array.from(activePanel.querySelectorAll(".settings-provider-pills, .settings-actions-row, .setting-actions-row, div"));
+        // Group interactive elements strictly by setting-group (1 group = 1 row)
+        var groups = Array.from(activePanel.querySelectorAll(".setting-group"));
         var contentRows = [];
-        rowContainers.forEach(function (rc) {
-            var btns = Array.from(rc.querySelectorAll("button:not([disabled])")).filter(function (b) {
-                return b.style.display !== "none" && b.offsetParent !== null && !b.closest("#settings-nav-sidebar");
+        groups.forEach(function (g) {
+            var btns = Array.from(g.querySelectorAll("button:not([disabled])")).filter(function (b) {
+                return b.style.display !== "none" && b.offsetParent !== null;
             });
             if (btns.length > 0) {
-                var alreadyHave = contentRows.some(function (r) {
-                    return r.length === btns.length && r[0] === btns[0];
-                });
-                if (!alreadyHave) {
-                    contentRows.push(btns);
-                }
+                contentRows.push(btns);
             }
         });
 
-        if (contentRows.length > 1) {
-            var uniqueRows = [];
-            var seenFirst = [];
-            contentRows.forEach(function (r) {
-                if (seenFirst.indexOf(r[0]) === -1) {
-                    seenFirst.push(r[0]);
-                    uniqueRows.push(r);
-                }
-            });
-            contentRows = uniqueRows;
-        }
-
-        // Determine if focus is currently in the left tab sidebar
         var currentTabIdx = sidebarTabs.indexOf(nav.focusedElement);
         var inTabs = (currentTabIdx !== -1) || (nav.settingsTier === "tabs");
 
@@ -3424,13 +3672,21 @@ var App = (function () {
             }
 
             if (code === KEY.DOWN) {
-                var nextTab = Math.min(sidebarTabs.length - 1, currentTabIdx + 1);
-                setFocus(sidebarTabs[nextTab]);
-                switchSettingsTab(sidebarTabs[nextTab].dataset.settingsTab);
+                if (currentTabIdx < sidebarTabs.length - 1) {
+                    var nextTab = currentTabIdx + 1;
+                    setFocus(sidebarTabs[nextTab]);
+                    switchSettingsTab(sidebarTabs[nextTab].dataset.settingsTab);
+                }
             } else if (code === KEY.UP) {
-                var prevTab = Math.max(0, currentTabIdx - 1);
-                setFocus(sidebarTabs[prevTab]);
-                switchSettingsTab(sidebarTabs[prevTab].dataset.settingsTab);
+                if (currentTabIdx > 0) {
+                    var prevTab = currentTabIdx - 1;
+                    setFocus(sidebarTabs[prevTab]);
+                    switchSettingsTab(sidebarTabs[prevTab].dataset.settingsTab);
+                } else if (state.layout !== "sidebar") {
+                    nav.tier = "tabs";
+                    var settNavTab = document.querySelector("#nav-tabs .nav-tab[data-tab='settings']");
+                    if (settNavTab) setFocus(settNavTab);
+                }
             } else if (code === KEY.RIGHT || code === KEY.CROSS) {
                 if (contentRows.length > 0 && contentRows[0].length > 0) {
                     nav.settingsTier = "content";
@@ -3440,10 +3696,11 @@ var App = (function () {
                     setFocus(activePill);
                 }
             } else if (code === KEY.CIRCLE) {
-                closeSettingsModal();
+                loadTabFeed("home");
+                focusBillboardPlay();
             }
         } else {
-            // Focus is in the right content pane
+            // Focus is in the content pane
             var currRow = -1;
             var currCol = -1;
             for (var r = 0; r < contentRows.length; r++) {
@@ -3471,6 +3728,10 @@ var App = (function () {
                     var prevR = currRow - 1;
                     var prevTargetCol = Math.min(currCol, contentRows[prevR].length - 1);
                     setFocus(contentRows[prevR][prevTargetCol]);
+                } else if (state.layout !== "sidebar") {
+                    nav.tier = "tabs";
+                    var settNavTab2 = document.querySelector("#nav-tabs .nav-tab[data-tab='settings']");
+                    if (settNavTab2) setFocus(settNavTab2);
                 }
             } else if (code === KEY.RIGHT) {
                 if (currCol < contentRows[currRow].length - 1) {
@@ -3480,7 +3741,6 @@ var App = (function () {
                 if (currCol > 0) {
                     setFocus(contentRows[currRow][currCol - 1]);
                 } else {
-                    // Leftmost item in row: return focus to active category tab on the left
                     nav.settingsTier = "tabs";
                     var activeTabBtn = sidebarTabs.find(function (t) {
                         return t.dataset.settingsTab === state.settingsTab;
@@ -3492,9 +3752,17 @@ var App = (function () {
                     nav.focusedElement.click();
                 }
             } else if (code === KEY.CIRCLE) {
-                closeSettingsModal();
+                nav.settingsTier = "tabs";
+                var activeTabBtn2 = sidebarTabs.find(function (t) {
+                    return t.dataset.settingsTab === state.settingsTab;
+                }) || sidebarTabs[0];
+                if (activeTabBtn2) setFocus(activeTabBtn2);
             }
         }
+    }
+
+    function navigateSettingsModal(code, KEY) {
+        navigateSettingsView(code, KEY);
     }
 
     return {

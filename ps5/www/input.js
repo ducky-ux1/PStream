@@ -82,7 +82,7 @@ var Input = (function () {
             var code = 0;
 
             var activeEl = document.activeElement;
-            var isInputActive = !!(activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.id === "search-input"));
+            var isInputActive = !!(activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.id === "search-input" || activeEl.id === "netflix-search-input"));
 
             if (isInputActive) {
                 // 1. Backspace & Delete keys: ALWAYS allow native character deletion!
@@ -217,7 +217,7 @@ var Input = (function () {
     function startGamepadPoll() {
         function poll() {
             var activeEl = document.activeElement;
-            var isInputActive = !!(activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.id === "search-input"));
+            var isInputActive = !!(activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.id === "search-input" || activeEl.id === "netflix-search-input"));
             if (isInputActive) {
                 // If user presses Circle, D-pad Down, or D-pad Left (when at start), dismiss OSK and navigate
                 var activeGamepads = getGamepadsList();
@@ -267,8 +267,6 @@ var Input = (function () {
                 // Shoulder Bumpers (Tab Switching)
                 checkButtonOnce(gp, 4, KEY.L1, "L1");             // L1 (Previous Tab)
                 checkButtonOnce(gp, 5, KEY.R1, "R1");             // R1 (Next Tab)
-                checkButtonOnce(gp, 6, KEY.L1, "L2_Fallback");    // L2 as fallback L1
-                checkButtonOnce(gp, 7, KEY.R1, "R2_Fallback");    // R2 as fallback R1
 
                 // Menu & Options
                 checkButtonOnce(gp, 8, KEY.OPTIONS, "Share_Options"); // Share / Create button as Options fallback

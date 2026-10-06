@@ -304,7 +304,7 @@ int main(int argc, char *argv[]) {
     const char* my_path = (argc > 0) ? argv[0] : NULL;
 
     log_msg("=====================================================");
-    log_msg("  PStream PS5 Standalone Installer & Updater v1.0.0  ");
+    log_msg("  PStream PS5 Standalone Installer & Updater v1.0.2  ");
     log_msg("=====================================================");
 
     if((err=sceAppInstUtilInitialize())) {
