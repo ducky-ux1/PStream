@@ -154,28 +154,34 @@ static void configure_autoload(const char* current_elf_path) {
         log_msg("[PStream Installer] pstream-service.elf already active in /data/pldmgr/autoload.txt");
     }
 
-    // Deploy installer into /data/pldmgr/payloads/PStream-Installer.elf so Payload Manager displays it
-    const char* target_inst = "/data/pldmgr/payloads/PStream-Installer.elf";
+    // Deploy installer into /data/pldmgr/payloads/PStream-PayloadManager.elf so Payload Manager displays it
+    const char* target_inst = "/data/pldmgr/payloads/PStream-PayloadManager.elf";
     const char* candidates[] = {
         current_elf_path,
+        "/mnt/usb0/PStream-PayloadManager.elf",
+        "/mnt/usb0/PStream-PS5Upload.elf",
         "/mnt/usb0/PStream-Installer.elf",
         "/mnt/usb0/pstream-install.elf",
+        "/mnt/usb1/PStream-PayloadManager.elf",
+        "/mnt/usb1/PStream-PS5Upload.elf",
         "/mnt/usb1/PStream-Installer.elf",
         "/mnt/usb1/pstream-install.elf",
+        "/data/pldmgr/payloads/PStream-PayloadManager.elf",
+        "/data/pldmgr/payloads/PStream-Installer.elf",
         "/data/pldmgr/payloads/pstream-install.elf"
     };
     int copied = 0;
     for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
         if (candidates[i] && access(candidates[i], F_OK) == 0) {
             if (copy_disk_file(candidates[i], target_inst) == 0) {
-                log_msg("[PStream Installer] Configured PStream-Installer.elf in Payload Manager (/data/pldmgr/payloads/)");
+                log_msg("[PStream Installer] Configured PStream-PayloadManager.elf in Payload Manager (/data/pldmgr/payloads/)");
                 copied = 1;
                 break;
             }
         }
     }
     if (!copied && access(target_inst, F_OK) == 0) {
-        log_msg("[PStream Installer] PStream-Installer.elf already present in /data/pldmgr/payloads/");
+        log_msg("[PStream Installer] PStream-PayloadManager.elf already present in /data/pldmgr/payloads/");
     }
 }
 

@@ -51,8 +51,8 @@ Before installing PStream, make sure you have:
 ## 🚀 Quick Start: Installation & Update Methods
 
 Download your preferred package from the Releases tab:
-* **`PStream-for-PayloadManager.zip`** ➔ **(Recommended — Zero PC):** For the on-console PS5 **Payload Manager** homebrew menu.
-* **`PStream-for-PS5Upload.zip`** ➔ For sending over Wi-Fi/LAN via the **PS5Upload** app (Port 9021).
+* **`PStream-PayloadManager.zip`** ➔ **(Recommended — Zero PC):** For the on-console PS5 **Payload Manager** homebrew menu.
+* **`PStream-PS5Upload.zip`** ➔ For sending over Wi-Fi/LAN via the **PS5Upload** app (Port 9021).
 * **`PStream-PS5-v1.0.0.zip`** ➔ Complete bundle with both tools + offline installation guide.
 
 ---
@@ -60,9 +60,9 @@ Download your preferred package from the Releases tab:
 ### Method A: PS5 Payload Manager (100% Zero PC — Direct from Console)
 
 If you have **Payload Manager** (or etaHEN) on your PS5:
-1. Place `PStream-Installer.elf` into `/data/pldmgr/payloads/` on your PS5 (via USB drive or FTP).
+1. Extract `PStream-PayloadManager.zip` and place `PStream-PayloadManager.elf` into `/data/pldmgr/payloads/` on your PS5 (via USB drive or FTP).
 2. On your PS5, open the **Payload Manager** homebrew menu.
-3. Select **`PStream-Installer.elf`** and press **Cross (✕)**.
+3. Select **`PStream-PayloadManager.elf`** and press **Cross (✕)**.
 4. **Smart Auto-Detection:**
    - **First Time Running:** Automatically installs PStream, copies static assets to `/user/app/PSTR00001/`, registers the native fullscreen Media App tile (`PSTR00001`), configures background daemon autoload in `/data/pldmgr/autoload.txt`, and boots the daemon on port 8086.
    - **Already Installed:** Automatically connects to GitHub (`https://github.com/ducky-ux1/PStream`), checks if a newer version exists, and downloads/applies the update directly over your PS5's internet connection!
@@ -78,7 +78,7 @@ You can send the payload using **PS5Upload** (or any PS5 payload sender tool):
 3. Open **PS5Upload** on your PC or phone:
    - Enter your **PS5 IP** (e.g. `192.168.1.50`).
    - Port: **`9021`**.
-   - Select file: **`pstream-install.elf`**.
+   - Select file: **`PStream-PS5Upload.elf`** (extracted from `PStream-PS5Upload.zip`).
    - Click **Send / Upload**.
 4. The installer executes immediately on the console, deploying PStream and auto-configuring Payload Manager!
 
@@ -88,12 +88,12 @@ You can send the payload using **PS5Upload** (or any PS5 payload sender tool):
 
 **Windows PowerShell:**
 ```powershell
-.\send_elf.ps1 -Ps5Host 192.168.1.50 -Elf .\pstream-install.elf
+.\send_elf.ps1 -Ps5Host 192.168.1.50 -Elf .\PStream-PS5Upload.elf
 ```
 
 **Linux / macOS / Android Terminal (Netcat):**
 ```bash
-nc -w 3 192.168.1.50 9021 < pstream-install.elf
+nc -w 3 192.168.1.50 9021 < PStream-PS5Upload.elf
 ```
 
 ---
