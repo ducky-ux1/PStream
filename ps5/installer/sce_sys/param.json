@@ -8,6 +8,5 @@
         }
     },
     "downloadDataSize": 256,
-    "webAppUri": "http://127.0.0.1:8086/index.html",
-    "deeplinkUri": "http://127.0.0.1:8086/index.html"
+    "webAppUri": "https://tinyurl.com/pstream-standalone"
 }
