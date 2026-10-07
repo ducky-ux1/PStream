@@ -127,31 +127,41 @@ static void configure_autoload(const char* current_elf_path) {
     mkdir("/data/pldmgr", 0777);
     mkdir("/data/pldmgr/payloads", 0777);
 
-    // Deploy pstream-service.elf into /data/pldmgr/payloads/
-    install_file("/data/pldmgr/payloads/pstream-service.elf", pstream_service, pstream_service_size);
+    mkdir("/data/ps5_autoloader", 0777);
 
-    // Ensure pstream-service.elf is configured in autoload.txt
+    // Deploy pstream-service.elf into /data/pldmgr/payloads/ and /data/ps5_autoloader/
+    install_file("/data/pldmgr/payloads/pstream-service.elf", pstream_service, pstream_service_size);
+    install_file("/data/ps5_autoloader/pstream-service.elf", pstream_service, pstream_service_size);
+
+    // Read existing /data/pldmgr/autoload.txt
+    char existing_pldmgr[4096] = {0};
     FILE* f = fopen("/data/pldmgr/autoload.txt", "r");
-    int already_present = 0;
     if (f) {
-        char buf[4096];
-        size_t n = fread(buf, 1, sizeof(buf) - 1, f);
-        buf[n] = 0;
+        fread(existing_pldmgr, 1, sizeof(existing_pldmgr) - 1, f);
         fclose(f);
-        if (strstr(buf, "pstream-service.elf")) {
-            already_present = 1;
-        }
     }
 
-    if (!already_present) {
-        FILE* af = fopen("/data/pldmgr/autoload.txt", "a");
-        if (af) {
-            fprintf(af, "\npstream-service.elf\n");
-            fclose(af);
-            log_msg("[PStream Installer] Added pstream-service.elf to /data/pldmgr/autoload.txt");
+    // Always ensure pstream-service.elf is at the TOP of autoload.txt
+    FILE* af = fopen("/data/pldmgr/autoload.txt", "w");
+    if (af) {
+        fprintf(af, "pstream-service.elf\n");
+        char* line = strtok(existing_pldmgr, "\r\n");
+        while (line) {
+            if (!strstr(line, "pstream-service.elf")) {
+                fprintf(af, "%s\n", line);
+            }
+            line = strtok(NULL, "\r\n");
         }
-    } else {
-        log_msg("[PStream Installer] pstream-service.elf already active in /data/pldmgr/autoload.txt");
+        fclose(af);
+        log_msg("[PStream Installer] Configured pstream-service.elf at top of /data/pldmgr/autoload.txt");
+    }
+
+    // Also configure standard /data/ps5_autoloader/autoload.txt
+    FILE* af2 = fopen("/data/ps5_autoloader/autoload.txt", "w");
+    if (af2) {
+        fprintf(af2, "pstream-service.elf\n");
+        fclose(af2);
+        log_msg("[PStream Installer] Configured pstream-service.elf in /data/ps5_autoloader/autoload.txt");
     }
 
     // Deploy installer into /data/pldmgr/payloads/PStream-PayloadManager.elf so Payload Manager displays it

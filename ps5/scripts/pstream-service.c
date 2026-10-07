@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <ps5/klog.h>
 
 #define SERVER_PORT 8086
 #define APP_DIR "/user/app/PSTR00001"
@@ -708,6 +709,10 @@ static void* client_worker(void* arg) {
         return NULL;
     }
     *path_end = 0;
+
+    char klog_buf[512];
+    snprintf(klog_buf, sizeof(klog_buf), "[PStream Service] HTTP %s", path_start);
+    klog_puts(klog_buf);
 
     // 1. Health check
     if (strcmp(path_start, "/health") == 0) {
