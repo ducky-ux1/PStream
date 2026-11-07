@@ -1,7 +1,8 @@
-/* PStream PS5 Media App Dashboard Installer & Standalone Daemon Deployment */
+/* PStream PS5 Media App Dashboard Installer & Standalone Daemon Deployment (v1.1.0) */
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -10,6 +11,7 @@
 #include <sys/mount.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/uio.h>
 #include <unistd.h>
 
@@ -21,8 +23,23 @@
 #endif
 
 #define IOVEC_SIZE(x) (sizeof(x) / sizeof(struct iovec))
-#define IOVEC_ENTRY(x) {x ? x : 0, x ? strlen(x)+1 : 0}
+#define IOVEC_ENTRY(x) {x ? (void*)(x) : 0, x ? strlen(x) + 1 : 0}
 
+#define INCASSET(name, file)			\
+  __asm__(".section .rodata\n"			\
+	  ".global " #name "\n"			\
+	  ".global " #name "_end\n"		\
+	  ".global " #name "_size\n"		\
+	  ".align 16\n"				\
+	  #name ":\n"				\
+	  ".incbin \"" file "\"\n"		\
+	  #name "_end:\n"			\
+	  ".quad " #name "_end - " #name "\n"	\
+	  ".previous\n");			\
+  extern const uint8_t name[];
+
+/* Explicit size symbol helper matching original layout */
+#undef INCASSET
 #define INCASSET(name, file)			\
   __asm__(".section .rodata\n"			\
 	  ".global " #name "\n"			\
@@ -63,37 +80,34 @@ static void log_msg(const char* msg) {
 }
 
 static int remount_system_ex(void) {
-  struct iovec iov[] = {
-    IOVEC_ENTRY("from"),      IOVEC_ENTRY("/dev/ssd0.system_ex"),
-    IOVEC_ENTRY("fspath"),    IOVEC_ENTRY("/system_ex"),
-    IOVEC_ENTRY("fstype"),    IOVEC_ENTRY("exfatfs"),
-    IOVEC_ENTRY("large"),     IOVEC_ENTRY("yes"),
-    IOVEC_ENTRY("timezone"),  IOVEC_ENTRY("static"),
-    IOVEC_ENTRY("async"),     IOVEC_ENTRY(NULL),
-    IOVEC_ENTRY("ignoreacl"), IOVEC_ENTRY(NULL),
-  };
-
-  return nmount(iov, IOVEC_SIZE(iov), MNT_UPDATE);
+    struct iovec iov[] = {
+        IOVEC_ENTRY("from"),      IOVEC_ENTRY("/dev/ssd0.system_ex"),
+        IOVEC_ENTRY("fspath"),    IOVEC_ENTRY("/system_ex"),
+        IOVEC_ENTRY("fstype"),    IOVEC_ENTRY("exfatfs"),
+        IOVEC_ENTRY("large"),     IOVEC_ENTRY("yes"),
+        IOVEC_ENTRY("timezone"),  IOVEC_ENTRY("static"),
+        IOVEC_ENTRY("async"),     IOVEC_ENTRY(NULL),
+        IOVEC_ENTRY("ignoreacl"), IOVEC_ENTRY(NULL),
+    };
+    return nmount(iov, IOVEC_SIZE(iov), MNT_UPDATE);
 }
 
 static int install_file(const char* path, const uint8_t* data, size_t size) {
-  unlink(path);
-  FILE* f = fopen(path, "wb");
-  if(!f) {
-    printf("[PStream Installer] Failed to open for writing: %s (errno %d)\n", path, errno);
-    return -1;
-  }
-
-  if(data && size) {
-    if(fwrite(data, size, 1, f) != 1) {
-      printf("[PStream Installer] Failed to write %zu bytes to: %s\n", size, path);
-      fclose(f);
-      return -1;
+    unlink(path);
+    FILE* f = fopen(path, "wb");
+    if (!f) {
+        printf("[PStream Installer] Failed to open for writing: %s (errno %d)\n", path, errno);
+        return -1;
     }
-  }
-
-  fclose(f);
-  return 0;
+    if (data && size) {
+        if (fwrite(data, size, 1, f) != 1) {
+            printf("[PStream Installer] Failed to write %zu bytes to: %s\n", size, path);
+            fclose(f);
+            return -1;
+        }
+    }
+    fclose(f);
+    return 0;
 }
 
 static int copy_disk_file(const char* src_path, const char* dst_path) {
@@ -117,54 +131,57 @@ static int copy_disk_file(const char* src_path, const char* dst_path) {
     return 0;
 }
 
-static int install_app(const char* title_id, const char* dir) {
-  printf("[PStream Installer] Registering %s with Sony AppInstUtil...\n", title_id);
-  return sceAppInstUtilAppInstallAll(0);
+static void prepend_autoload_entry(const char* autoload_path, const char* entry_name) {
+    char existing[8192];
+    memset(existing, 0, sizeof(existing));
+    FILE* rf = fopen(autoload_path, "r");
+    if (rf) {
+        size_t nr = fread(existing, 1, sizeof(existing) - 1, rf);
+        existing[nr] = 0;
+        fclose(rf);
+    }
+
+    FILE* wf = fopen(autoload_path, "w");
+    if (!wf) return;
+
+    fprintf(wf, "%s\n", entry_name);
+    char* saveptr = NULL;
+    char* line = strtok_r(existing, "\r\n", &saveptr);
+    while (line) {
+        if (line[0] != 0 && !strstr(line, entry_name)) {
+            fprintf(wf, "%s\n", line);
+        }
+        line = strtok_r(NULL, "\r\n", &saveptr);
+    }
+    fclose(wf);
+}
+
+static int install_app(const char* title_id) {
+    printf("[PStream Installer] Registering %s with Sony AppInstUtil...\n", title_id);
+    return sceAppInstUtilAppInstallAll(0);
 }
 
 static void configure_autoload(const char* current_elf_path) {
     mkdir("/data", 0777);
     mkdir("/data/pldmgr", 0777);
     mkdir("/data/pldmgr/payloads", 0777);
-
     mkdir("/data/ps5_autoloader", 0777);
 
-    // Deploy pstream-service.elf into /data/pldmgr/payloads/ and /data/ps5_autoloader/
     install_file("/data/pldmgr/payloads/pstream-service.elf", pstream_service, pstream_service_size);
     install_file("/data/ps5_autoloader/pstream-service.elf", pstream_service, pstream_service_size);
 
-    // Read existing /data/pldmgr/autoload.txt
-    char existing_pldmgr[4096] = {0};
-    FILE* f = fopen("/data/pldmgr/autoload.txt", "r");
-    if (f) {
-        fread(existing_pldmgr, 1, sizeof(existing_pldmgr) - 1, f);
-        fclose(f);
+    // Preserve existing user entries in both autoload.txt locations
+    prepend_autoload_entry("/data/pldmgr/autoload.txt", "pstream-service.elf");
+    prepend_autoload_entry("/data/ps5_autoloader/autoload.txt", "pstream-service.elf");
+    log_msg("[PStream Installer] Configured pstream-service.elf in autoloaders (existing entries preserved)");
+
+    // Optional etaHEN daemons directory support
+    if (access("/data/etaHEN", F_OK) == 0) {
+        mkdir("/data/etaHEN/daemons", 0777);
+        install_file("/data/etaHEN/daemons/pstream-service.elf", pstream_service, pstream_service_size);
+        log_msg("[PStream Installer] Deployed pstream-service.elf to /data/etaHEN/daemons/");
     }
 
-    // Always ensure pstream-service.elf is at the TOP of autoload.txt
-    FILE* af = fopen("/data/pldmgr/autoload.txt", "w");
-    if (af) {
-        fprintf(af, "pstream-service.elf\n");
-        char* line = strtok(existing_pldmgr, "\r\n");
-        while (line) {
-            if (!strstr(line, "pstream-service.elf")) {
-                fprintf(af, "%s\n", line);
-            }
-            line = strtok(NULL, "\r\n");
-        }
-        fclose(af);
-        log_msg("[PStream Installer] Configured pstream-service.elf at top of /data/pldmgr/autoload.txt");
-    }
-
-    // Also configure standard /data/ps5_autoloader/autoload.txt
-    FILE* af2 = fopen("/data/ps5_autoloader/autoload.txt", "w");
-    if (af2) {
-        fprintf(af2, "pstream-service.elf\n");
-        fclose(af2);
-        log_msg("[PStream Installer] Configured pstream-service.elf in /data/ps5_autoloader/autoload.txt");
-    }
-
-    // Deploy installer into /data/pldmgr/payloads/PStream-PayloadManager.elf so Payload Manager displays it
     const char* target_inst = "/data/pldmgr/payloads/PStream-PayloadManager.elf";
     const char* candidates[] = {
         current_elf_path,
@@ -180,69 +197,25 @@ static void configure_autoload(const char* current_elf_path) {
         "/data/pldmgr/payloads/PStream-Installer.elf",
         "/data/pldmgr/payloads/pstream-install.elf"
     };
-    int copied = 0;
     for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
         if (candidates[i] && access(candidates[i], F_OK) == 0) {
             if (copy_disk_file(candidates[i], target_inst) == 0) {
-                log_msg("[PStream Installer] Configured PStream-PayloadManager.elf in Payload Manager (/data/pldmgr/payloads/)");
-                copied = 1;
+                log_msg("[PStream Installer] Updated PStream-PayloadManager.elf in /data/pldmgr/payloads/");
                 break;
             }
         }
-    }
-    if (!copied && access(target_inst, F_OK) == 0) {
-        log_msg("[PStream Installer] PStream-PayloadManager.elf already present in /data/pldmgr/payloads/");
-    }
-}
-
-static void start_service_if_needed(void) {
-    sceNetInit();
-    sceNetPoolCreate("pstream_inst_net", 1024 * 1024, 0);
-
-    int s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s >= 0) {
-        struct sockaddr_in srv;
-        memset(&srv, 0, sizeof(srv));
-        srv.sin_family = AF_INET;
-        srv.sin_port = htons(8086);
-        srv.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-
-        if (connect(s, (struct sockaddr*)&srv, sizeof(srv)) == 0) {
-            log_msg("[PStream Installer] Native daemon is already running on port 8086.");
-            close(s);
-            return;
-        }
-        close(s);
-    }
-
-    log_msg("[PStream Installer] Launching native daemon via local elfldr (9021)...");
-    int ldr = socket(AF_INET, SOCK_STREAM, 0);
-    if (ldr >= 0) {
-        struct sockaddr_in ldr_addr;
-        memset(&ldr_addr, 0, sizeof(ldr_addr));
-        ldr_addr.sin_family = AF_INET;
-        ldr_addr.sin_port = htons(9021);
-        ldr_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-
-        if (connect(ldr, (struct sockaddr*)&ldr_addr, sizeof(ldr_addr)) == 0) {
-            size_t total = 0;
-            while (total < pstream_service_size) {
-                ssize_t n = send(ldr, pstream_service + total, pstream_service_size - total, 0);
-                if (n <= 0) break;
-                total += n;
-            }
-            shutdown(ldr, SHUT_WR);
-            log_msg("[PStream Installer] Daemon sent to elfldr (Port 8086 starting).");
-        } else {
-            log_msg("[PStream Installer] Note: elfldr port 9021 not reachable (daemon will run via pldmgr autoload).");
-        }
-        close(ldr);
     }
 }
 
 static int query_daemon(const char* endpoint, char* out_buf, size_t out_max) {
     int s = socket(AF_INET, SOCK_STREAM, 0);
     if (s < 0) return -1;
+
+    struct timeval tv;
+    tv.tv_sec = 8;
+    tv.tv_usec = 0;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
     struct sockaddr_in srv;
     memset(&srv, 0, sizeof(srv));
@@ -260,18 +233,62 @@ static int query_daemon(const char* endpoint, char* out_buf, size_t out_max) {
     send(s, req, strlen(req), 0);
 
     size_t total = 0;
-    while (total < out_max - 1) {
-        ssize_t n = recv(s, out_buf + total, out_max - 1 - total, 0);
-        if (n <= 0) break;
-        total += n;
+    if (out_buf && out_max > 1) {
+        while (total < out_max - 1) {
+            ssize_t n = recv(s, out_buf + total, out_max - 1 - total, 0);
+            if (n <= 0) break;
+            total += (size_t)n;
+        }
+        out_buf[total] = 0;
     }
-    out_buf[total] = 0;
     close(s);
     return (int)total;
 }
 
+static void restart_service_with_latest(void) {
+    sceNetInit();
+    sceNetPoolCreate("pstream_inst_net", 1024 * 1024, 0);
+
+    // Stop any previously running older daemon so v1.1.0 binds port 8086 cleanly
+    char resp[256];
+    if (query_daemon("/shutdown", resp, sizeof(resp)) >= 0) {
+        log_msg("[PStream Installer] Stopped previous daemon instance on port 8086.");
+        usleep(450000);
+    }
+
+    log_msg("[PStream Installer] Launching native daemon v1.1.0 via local elfldr (9021)...");
+    int ldr = socket(AF_INET, SOCK_STREAM, 0);
+    if (ldr >= 0) {
+        struct sockaddr_in ldr_addr;
+        memset(&ldr_addr, 0, sizeof(ldr_addr));
+        ldr_addr.sin_family = AF_INET;
+        ldr_addr.sin_port = htons(9021);
+        ldr_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+        if (connect(ldr, (struct sockaddr*)&ldr_addr, sizeof(ldr_addr)) == 0) {
+            size_t total = 0;
+            while (total < pstream_service_size) {
+                ssize_t n = send(ldr, pstream_service + total, pstream_service_size - total, 0);
+                if (n <= 0) break;
+                total += (size_t)n;
+            }
+            shutdown(ldr, SHUT_WR);
+            log_msg("[PStream Installer] Daemon v1.1.0 sent to elfldr (Port 8086 active).");
+        } else {
+            log_msg("[PStream Installer] Note: elfldr port 9021 not reachable (daemon will start via autoload).");
+        }
+        close(ldr);
+    }
+}
+
 static void refresh_installed_assets(void) {
-    log_msg("[PStream Installer] Synchronizing core assets from embedded payload...");
+    log_msg("[PStream Installer] Deploying core assets and updated param.json...");
+
+    mkdir("/system_ex/app/"TITLE_ID, 0755);
+    mkdir("/system_ex/app/"TITLE_ID"/sce_sys", 0755);
+    mkdir("/user/app/"TITLE_ID, 0755);
+    mkdir("/user/app/"TITLE_ID"/sce_sys", 0755);
+    mkdir("/user/appmeta/"TITLE_ID, 0755);
 
     // System_ex application files
     install_file("/system_ex/app/"TITLE_ID"/eboot.bin", 0, 0);
@@ -306,105 +323,70 @@ static void refresh_installed_assets(void) {
     install_file("/user/appmeta/"TITLE_ID"/icon0.png", icon0, icon0_size);
     install_file("/user/appmeta/"TITLE_ID"/pic1.png", pic1, pic1_size);
 
-    log_msg("[PStream Installer] Local files successfully synchronized.");
+    log_msg("[PStream Installer] Core files synchronized.");
 }
 
 int main(int argc, char *argv[]) {
     int err;
     const char* my_path = (argc > 0) ? argv[0] : NULL;
 
+    signal(SIGPIPE, SIG_IGN);
+
     log_msg("=====================================================");
-    log_msg("  PStream PS5 Standalone Installer & Updater v1.0.2  ");
+    log_msg("  PStream PS5 Standalone Installer & Updater v1.1.0  ");
     log_msg("=====================================================");
 
-    if((err=sceAppInstUtilInitialize())) {
+    if ((err = sceAppInstUtilInitialize())) {
         printf("[PStream] sceAppInstUtilInitialize: error 0x%08X\n", err);
         return -1;
     }
 
     remount_system_ex();
 
-    // Check if PStream is already installed
-    int is_installed = (access("/user/app/"TITLE_ID"/version.json", F_OK) == 0 ||
-                        access("/user/app/"TITLE_ID"/app.js", F_OK) == 0);
+    int was_installed = (access("/user/app/"TITLE_ID"/version.json", F_OK) == 0 ||
+                         access("/user/app/"TITLE_ID"/app.js", F_OK) == 0);
 
-    if (is_installed) {
-        log_msg("[PStream Installer] Existing installation detected.");
-        log_msg("[PStream Installer] Checking for updates and ensuring service health...");
-
-        // Ensure autoload & Payload Manager placement
-        configure_autoload(my_path);
-
-        // Ensure service is running
-        start_service_if_needed();
-        usleep(500000); // 500ms delay to allow port 8086 binding
-
-        // Check for updates on GitHub via native daemon
-        char update_buf[4096];
-        int q_len = query_daemon("/api/check_update", update_buf, sizeof(update_buf));
-        int updated_online = 0;
-
-        if (q_len > 0) {
-            if (strstr(update_buf, "\"update_available\": true") || strstr(update_buf, "\"update_available\":true")) {
-                log_msg("[PStream Installer] Newer update detected on GitHub! Downloading latest files...");
-                char apply_buf[4096];
-                int a_len = query_daemon("/api/apply_update", apply_buf, sizeof(apply_buf));
-                if (a_len > 0 && strstr(apply_buf, "\"success\": true")) {
-                    log_msg("[PStream Installer] >>> SUCCESS: PStream updated directly from GitHub! <<<");
-                    updated_online = 1;
-                } else {
-                    log_msg("[PStream Installer] GitHub update download failed; refreshing from embedded payload.");
-                }
-            } else if (strstr(update_buf, "\"update_available\": false") || strstr(update_buf, "\"update_available\":false")) {
-                log_msg("[PStream Installer] App is already up to date with latest GitHub release.");
-            } else {
-                log_msg("[PStream Installer] GitHub unreachable (offline). Proceeding with embedded refresh.");
-            }
-        } else {
-            log_msg("[PStream Installer] Daemon not answering update query; proceeding with embedded refresh.");
-        }
-
-        if (!updated_online) {
-            refresh_installed_assets();
-        }
-
-        // Re-verify registration with Sony Media Shell
-        install_app(TITLE_ID, "/user/app/");
-        log_msg("[PStream Installer] Update verification complete! Enjoy PStream.");
-        log_msg("=====================================================");
-        return 0;
+    if (was_installed) {
+        log_msg("[PStream Installer] Existing installation detected. Refreshing registration & daemon...");
+    } else {
+        log_msg("[PStream Installer] Fresh install detected. Performing full deployment...");
     }
 
-    // FRESH INSTALLATION FLOW
-    log_msg("[PStream Installer] Fresh install detected. Performing full deployment...");
-
+    // Purge stale ShellCore app.db registration (e.g. old TinyURL webAppUri) before re-registering
     sceAppInstUtilAppUnInstall("FAKE00000");
     sceAppInstUtilAppUnInstall(TITLE_ID);
 
-    // Create System & User app directories
-    mkdir("/system_ex/app/"TITLE_ID, 0755);
-    mkdir("/system_ex/app/"TITLE_ID"/sce_sys", 0755);
-    mkdir("/user/app/"TITLE_ID, 0755);
-    mkdir("/user/app/"TITLE_ID"/sce_sys", 0755);
-    mkdir("/user/appmeta/"TITLE_ID, 0755);
-
-    // Install all core assets
+    // Deploy embedded v1.1.0 assets & GitHub Pages param.json
     refresh_installed_assets();
 
-    // Configure autostart and Payload Manager
+    // Configure autoloaders safely (preserving existing user entries)
     configure_autoload(my_path);
 
-    // Launch daemon
-    start_service_if_needed();
+    // Restart background daemon with v1.1.0 binary
+    restart_service_with_latest();
+    usleep(500000);
 
-    // Register dashboard tile with Sony Media Shell
-    if((err=install_app(TITLE_ID, "/user/app/"))) {
+    // Check GitHub for any newer OTA web frontend bundle
+    char update_buf[4096];
+    int q_len = query_daemon("/api/check_update", update_buf, sizeof(update_buf));
+    if (q_len > 0 && (strstr(update_buf, "\"update_available\": true") ||
+                      strstr(update_buf, "\"update_available\":true"))) {
+        log_msg("[PStream Installer] Newer web assets found on GitHub! Applying OTA update...");
+        char apply_buf[4096];
+        if (query_daemon("/api/apply_update", apply_buf, sizeof(apply_buf)) > 0 &&
+            strstr(apply_buf, "\"success\": true")) {
+            log_msg("[PStream Installer] >>> OTA web assets updated from GitHub! <<<");
+        }
+    }
+
+    // Register dashboard tile in PS5 Media Apps bar
+    if ((err = install_app(TITLE_ID))) {
         printf("[PStream Installer] install_app: error 0x%08X\n", err);
         return -1;
     }
 
-    log_msg("[PStream Installer] >>> INSTALLATION SUCCESSFUL! <<<");
-    log_msg("[PStream Installer] PStream has been added to your PS5 Media Apps bar.");
+    log_msg("[PStream Installer] >>> PSTREAM v1.1.0 READY! <<<");
+    log_msg("[PStream Installer] Launch PStream from your PS5 Media tab.");
     log_msg("=====================================================");
     return 0;
 }

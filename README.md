@@ -1,138 +1,144 @@
-# PStream - PlayStation 5 Native Media App (v1.0.1 Standalone)
+<div align="center">
 
-<p align="center">
-  <img src="ps5/www/logo.png" alt="PStream Logo" width="220" />
-</p>
+<img src="ps5/installer/sce_sys/icon0.png" width="128" height="128" alt="PStream Logo" style="border-radius: 26px;" />
 
-<p align="center">
-  <strong>An open-source, 100% free streaming application designed natively for PlayStation 5.</strong><br>
-  100% Standalone console experience • Zero PC required • Dedicated C daemon on port 8086 • DualSense wireless controller engine • Zero ads.
-</p>
+# PStream
 
-<p align="center">
-  <a href="https://ko-fi.com/duckyiux1"><img src="https://img.shields.io/badge/Support%20on-Ko--fi-ff5e5b?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>
-  <img src="https://img.shields.io/badge/Platform-PS5%20(Firmware%203.xx--13.60+)-003791?style=for-the-badge&logo=playstation&logoColor=white" alt="PlayStation">
-  <img src="https://img.shields.io/badge/License-GPL--3.0-green?style=for-the-badge" alt="License">
-  <img src="https://img.shields.io/badge/Version-v1.0.1%20Standalone-red?style=for-the-badge" alt="Version">
-</p>
+**Standalone 10-Foot Media Streaming Application for PlayStation 5 & PlayStation 4**
+
+[![Release](https://img.shields.io/github/v/release/ducky-ux1/PStream?style=flat-square&color=E50914&label=Latest%20Release)](https://github.com/ducky-ux1/PStream/releases/latest)
+[![Platforms](https://img.shields.io/badge/Platforms-PS5%20%7C%20PS4-003791?style=flat-square&logo=playstation)](https://github.com/ducky-ux1/PStream/releases/latest)
+[![License](https://img.shields.io/badge/License-MIT-22C55E?style=flat-square)](LICENSE)
+
+[**Download Latest Release (v1.1.0)**](https://github.com/ducky-ux1/PStream/releases/latest) • [**Installation Guide**](INSTALLATION_GUIDE.md) • [**Report an Issue**](https://github.com/ducky-ux1/PStream/issues)
+
+</div>
 
 ---
 
-## 📖 Table of Contents
-* [About The Project](#about-the-project)
-* [Key Features](#key-features)
-* [System Architecture](#system-architecture)
-* [Installation Guide](#installation-guide)
-* [DualSense Controller Mapping](#dualsense-controller-mapping)
-* [Project Structure](#project-structure)
-* [License](#license)
+## Overview
+
+**PStream** is a standalone homebrew media player built specifically for jailbroken **PlayStation 5** and **PlayStation 4** consoles. Once installed, it runs entirely on the console with **no PC, external proxy, or companion server required**.
+
+### Key Features
+
+- **Native PS4 & PS5 Support**
+  - **PlayStation 4 (`PSTR00004`):** Installable standalone Fake PKG (`.pkg`) for GoldHEN / Mira across FW 5.05–12.02. Includes a built-in Orbis TLS & HLS segment proxy that bypasses expired root CA certificates on older firmwares.
+  - **PlayStation 5 (`PSTR00001`):** Installs directly onto the PS5 **Media** tab as a borderless fullscreen application backed by an autoloading native background daemon (`pstream-service.elf`).
+- **Controller-First 10-Foot UI:** Spatial D-Pad / Left-Stick navigation, L1/R1 tab & episode switching, on-screen player controls, Resume / Continue Watching, and My List.
+- **Multi-Language Audio & Metadata:** Switch catalog and preferred audio stream language directly in **Settings** (`English`, `Deutsch`, `Italiano`, `Español`, `Français`, `Português`), with automatic English fallback when a localized dub is unavailable.
+- **Built-In OTA Web Updater:** Update UI and extractor configurations directly from **Settings -> Check for Updates** without reinstalling.
+- **Rest Mode & Long-Session Resilience (v1.1.0+):** Automatic `sceHttp` / `sceSsl` context recovery after console Rest Mode, `SIGPIPE`-hardened socket handling, dynamic TTL-cached AES-128 key proxying, and permanent GitHub Pages HTTPS bootstrapping on PS5.
 
 ---
 
-## About The Project
+## Quick Start
 
-**PStream** is a free, open-source streaming app created specifically for the PlayStation community. It delivers a modern, high-fidelity TV interface directly to your PS5 dashboard, powered by native hardware video decoding, zero advertisements, and seamless DualSense navigation.
+Download the appropriate package from [**GitHub Releases**](https://github.com/ducky-ux1/PStream/releases/latest):
 
-* **100% Standalone (Zero PC Required):** After sending the installer payload once to your PS5, no computer or external server is ever required. You can turn off your PC, pick up your DualSense controller, and stream movies and TV shows directly from your console.
-* **100% Free & Always Free:** No subscriptions, no registration, no hidden paywalls, and **zero ads**.
-* **Native Fullscreen Media Container:** Registered under official category `applicationCategoryType: 66048` (BigApp). Launches borderless in 1080p/4K directly from the PS5 Media dashboard—never in a browser card or web widget.
-* **Silky Smooth 60 FPS Viewport Scrolling:** Custom `requestAnimationFrame` cubic-eased scroll engine built specifically for PlayStation WebKit. Auto-scrolls the modal viewport to keep active episodes and recommendations vertically centered.
-* **Horizontal Seasons Carousel:** Seamlessly browse series with dozens of seasons (Grey's Anatomy, The Simpsons, etc.) with automatic centering of active season pills.
-* **DualSense Controller Engine:** Tailored specifically for PlayStation DualSense controllers with edge-triggered button mappings, analog deadzones, and silky-smooth D-pad navigation.
-* **Smart Continue Watching:** Remembers your exact episode and timestamp so you can resume your media with a single button press.
+| Console | File to Download | How to Install |
+| :--- | :--- | :--- |
+| **PlayStation 4** | `PStream-PS4-v1.1.0.pkg` | Copy to a USB drive (exFAT/FAT32) and install via **GoldHEN -> Debug Settings -> Package Installer**, then launch **PStream** from the Home Screen. |
+| **PlayStation 5** *(USB / Payload Manager)* | `PStream-PS5-PayloadManager-v1.1.0.zip` *(or `PStream-PayloadManager.elf`)* | Run `PStream-PayloadManager.elf` once via **Payload Manager**. Launch **PStream** from the **Media** tab. |
+| **PlayStation 5** *(Network / Android)* | `PStream-PS5-Upload-v1.1.0.zip` | Send `PStream-PS5Upload.elf` to your PS5 IP on port `9021` via Android **PS5 Upload**, `send_elf.ps1`, or `nc`. |
+| **PlayStation 5** *(Uninstaller)* | `PStream-PS5-Uninstaller-v1.1.0.zip` *(or `PStream-Uninstall.elf`)* | Send `PStream-Uninstall.elf` once to cleanly stop the background service, remove `PSTR00001` from the Media tab, and clean `autoload.txt`. |
 
-> [!NOTE]  
-> If you enjoy PStream and want to support continued development, new providers, and upcoming PlayStation homebrew projects, you can support on Ko-fi:  
-> **[https://ko-fi.com/duckyiux1](https://ko-fi.com/duckyiux1)** — Thank you for your support!
+See [**INSTALLATION_GUIDE.md**](INSTALLATION_GUIDE.md) for step-by-step instructions and troubleshooting.
 
 ---
 
-## System Architecture
+## Controller Mapping
 
-Unlike traditional streaming solutions that require a Node.js or Python server running on your computer, PStream operates entirely within the PS5 operating system:
+| Button | In Menus | During Video Playback |
+| :--- | :--- | :--- |
+| **D-Pad / Left Stick** | Spatial 4-way navigation | Show controls / navigate player buttons |
+| **Cross (`X`)** | Select / Play | Toggle Play / Pause (or activate focused control) |
+| **Circle (`O`)** | Back / Close modal | Close player and save watch progress |
+| **L1 / R1** | Switch top navigation tabs | Seek `-10s` / `+10s` |
+| **L2 / R2** | Jump to top | Seek `-30s` / `+30s` |
+
+---
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    A["PS5 Boot / Jailbreak"] --> B["Autoload: /data/pldmgr/payloads/"]
-    B --> C["pstream-service.elf (Port 8086)"]
-    D["PS5 Media Dashboard"] --> E["Launch PSTR00001 (Category 66048)"]
-    E --> F["Native WebKit Engine"]
-    F <-->|Local HTTP Loopback 127.0.0.1:8086| C
-    C <-->|Scrapers & HLS Proxy| G["Internet CDNs & TMDb"]
+    subgraph Console["PlayStation 4 / PlayStation 5 (127.0.0.1)"]
+        UI["1080p Fullscreen WebKit Shell<br/>(app.js + hls.js + input.js)"]
+        ENG["Native C/C++ Stream Engine<br/>(Port 8086 • sceHttp / sceSsl)"]
+        UI <-->|"HTTP Loopback"| ENG
+    end
+    TMDB["TMDb API & Poster CDN"]
+    CDN["Upstream HLS Playlists, Keys & Segments"]
+    GH["GitHub Pages Bootstrapper & OTA Updates"]
+
+    ENG -->|"TLS Bypass & Proxy"| TMDB
+    ENG -->|"Playlist Rewrite / Key Cache / Segment Relay"| CDN
+    GH -.->|"PS5 HTTPS Entry & OTA"| Console
 ```
 
-1. **Category `66048` (BigApp Media Container):** Defined in `param.json`, instructing the PS5 ShellCore to allocate dedicated BigApp resources and run full-screen without window decorations.
-2. **Local HTTP Daemon (`pstream-service`):** Compiled with the Prospero PS5 toolchain. Handles local file serving from `/user/app/PSTR00001/`, HLS playlist rewriting, AES-128 key delivery, and TMDb metadata caching.
-3. **Zero Configuration:** All networking runs locally over loopback (`127.0.0.1:8086`), requiring zero port forwarding or external dependencies.
-
----
-
-## Installation Guide
-
-For complete, detailed instructions on installing and updating PStream across Windows, Linux, macOS, and Android, check the dedicated guide:
-
-👉 **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)**
-
-### Quick Start Options:
-* **Option 1: PS5 Payload Manager (100% Zero PC):** Place `PStream-Installer.elf` in `/data/pldmgr/payloads/` and run it directly from your PS5's Payload Manager menu. Automatically installs the app and auto-updates from GitHub when already installed!
-* **Option 2: PS5Upload & GUI Senders:** Send `pstream-install.elf` to your PS5's IP address on port `9021`.
-* **Option 3: PowerShell Script (Windows):** Run `.\send_elf.ps1 -Ps5Host YOUR_PS5_IP -Elf .\pstream-install.elf`
-* **Option 4: In-App Updates:** Update directly from your TV couch in PStream Settings with zero PC involved!
-
----
-
-## DualSense Controller Mapping
-
-| Button / Control | Browse Mode | Detail Modal Mode | Fullscreen Player |
-| :--- | :--- | :--- | :--- |
-| **D-Pad / Left Stick** | Grid & Shelf Navigation | Navigate Sections & Cards | OSD Navigation / Seek Scrub |
-| **Cross (✕)** | Open Title / Select Tab | Play Media / Select Season / Select Card | Play / Pause / Activate Button |
-| **Circle (◯)** | Clear Search / Exit Menu | Close Modal & Return to Browse | Exit Player & Return to Browse |
-| **Square (▢)** | — | — | Toggle Aspect Ratio (Contain / Cover / Fill) |
-| **Triangle (△)** | Jump to Search Tab | — | Quick Search |
-| **L1 / R1** | Switch Catalog Tabs | — | — |
-| **L2 / R2** | — | — | Jump 10s Backward / Forward |
-| **Options (☰)** | Quick Menu | — | Open Audio, Subtitles & Episodes Drawer |
-
----
-
-## Project Structure
+### Repository Structure
 
 ```text
-github/
-├── .gitignore
-├── LICENSE
-├── README.md                      # Main repository documentation
-├── INSTALLATION_GUIDE.md          # Comprehensive step-by-step setup guide
-├── release/
-│   ├── pstream-install.elf        # Standalone installer payload binary (~1.5 MB)
-│   ├── PStream-PS5-v1.0.0.zip     # Packaged release archive with QuickStart guide
-│   └── README.txt                 # Plaintext quick reference
-└── ps5/
-    ├── installer/
-    │   ├── main.c                 # Installer source (AppInstUtil, assets INCBIN, daemon deploy)
-    │   ├── Makefile               # Prospero clang build script
-    │   ├── pstream-install.elf    # Compiled installer binary
-    │   └── sce_sys/
-    │       ├── param.json         # Media App definition (Category 66048, 0 deeplink)
-    │       ├── icon0.png          # Dashboard icon (512x512)
-    │       └── pic1.png           # Splash screen (1920x1080)
-    ├── scripts/
-    │   ├── pstream-service.c      # Standalone C daemon source (HLS proxy, AES-128 key relay)
-    │   ├── pstream-service.elf    # Compiled standalone C daemon binary
-    │   └── send_elf.ps1           # Windows PowerShell payload sender script
-    └── www/
-        ├── index.html             # PS5 WebKit Netflix-style TV UI
-        ├── app.js                 # Spatial focus engine, modal navigation, TMDb API
-        ├── app.css                # 60 FPS TV styles, focus highlights, modal sheet
-        ├── input.js               # DualSense gamepad & keyboard input engine
-        ├── hls.min.js             # Hardware-accelerated HLS video engine
-        ├── logo.png               # Brand logo
-        └── favicon.png            # Icon asset
+PStream/
+├── docs/                       # Permanent GitHub Pages HTTPS bootstrapper for PS5 ShellCore
+│   └── index.html
+├── ps4/                        # Standalone PlayStation 4 fPKG source (OpenOrbis C++17)
+│   ├── include/                # Orbis WebBrowserDialog ABI, VideoOut & server headers
+│   ├── src/                    # main.cpp, server.cpp (TLS/HLS proxy), graphics.cpp
+│   ├── sce_module/             # OpenOrbis runtime PRX modules
+│   ├── sce_sys/                # PS4 icon0.png, pic1.png, right.sprx
+│   └── scripts/                # build.bat & package_fpkg.bat
+├── ps5/                        # Standalone PlayStation 5 Media App & Daemon (PS5 Payload SDK)
+│   ├── installer/              # main.c (installer/updater), uninstall.c, Makefile, sce_sys/
+│   ├── scripts/                # pstream-service.c (background daemon), Makefile, send_elf.ps1
+│   └── www/                    # Shared 10-foot TV frontend (PS4 & PS5)
+├── INSTALLATION_GUIDE.md
+└── LICENSE
 ```
 
 ---
+
+## Building from Source
+
+### PlayStation 5 (`ps5-payload-sdk`)
+
+Requires Linux or WSL2 with [`ps5-payload-sdk`](https://github.com/ps5-payload-dev/sdk) installed at `/opt/ps5-payload-sdk`:
+
+```bash
+# 1. Build the background stream engine daemon
+cd ps5/scripts
+make clean && make
+
+# 2. Build the self-contained PS5 installer & uninstaller payloads
+cd ../installer
+make clean && make
+```
+
+Outputs:
+- `ps5/scripts/pstream-service.elf`
+- `ps5/installer/pstream-install.elf`
+- `ps5/installer/pstream-uninstall.elf`
+
+### PlayStation 4 (`OpenOrbis PS4 Toolchain`)
+
+Requires Windows with [`OpenOrbis PS4 Toolchain`](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain) and Python 3 (`py`):
+
+```bat
+cd ps4
+call scripts\build.bat
+call scripts\package_fpkg.bat
+```
+
+Output:
+- `ps4/build/PStream-PS4-v1.1.0.pkg`
+
+---
+
+## Disclaimer
+
+PStream does not host, store, archive, or distribute any media files. All metadata is provided by TMDb and streams are resolved on-demand from public third-party web endpoints. This project is provided strictly for educational and homebrew research purposes.
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0** (GPL-3.0). See [LICENSE](LICENSE) for details.
+Released under the [MIT License](LICENSE).

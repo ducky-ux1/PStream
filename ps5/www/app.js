@@ -1,13 +1,80 @@
 /**
- * PStream - Ultra-Fidelity PlayStation 5 Application Engine
- * Native HLS Video Pipeline - DualSense Controller Engine - Zero Ads Guarantee
- * Version 1.0 Release Baseline Overhaul
+ * PStream - PlayStation 5 & PlayStation 4 Standalone Media Engine
+ * Native HLS Video Pipeline - DualSense & DualShock 4 Controller Engine - Zero Ads Guarantee
+ * Version 1.1.0 Multi-Console Release
  */
+(function () {
+    if (!Array.from) {
+        Array.from = function (arrLike) {
+            var out = [];
+            if (!arrLike) return out;
+            for (var i = 0; i < arrLike.length; i++) out.push(arrLike[i]);
+            return out;
+        };
+    }
+    if (!Array.prototype.find) {
+        Array.prototype.find = function (pred) {
+            for (var i = 0; i < this.length; i++) {
+                if (pred(this[i], i, this)) return this[i];
+            }
+            return undefined;
+        };
+    }
+    if (!Array.prototype.findIndex) {
+        Array.prototype.findIndex = function (pred) {
+            for (var i = 0; i < this.length; i++) {
+                if (pred(this[i], i, this)) return i;
+            }
+            return -1;
+        };
+    }
+    if (window.NodeList && !NodeList.prototype.forEach) {
+        NodeList.prototype.forEach = Array.prototype.forEach;
+    }
+    if (window.Element && !Element.prototype.closest) {
+        Element.prototype.closest = function (s) {
+            var el = this;
+            var matches = el.matches || el.webkitMatchesSelector;
+            while (el && el.nodeType === 1) {
+                if (matches && matches.call(el, s)) return el;
+                el = el.parentElement || el.parentNode;
+            }
+            return null;
+        };
+    }
+    if (!window.fetch) {
+        window.fetch = function (url) {
+            return new Promise(function (resolve, reject) {
+                var xhr = new XMLHttpRequest();
+                xhr.open("GET", url, true);
+                xhr.onload = function () {
+                    var ok = xhr.status >= 200 && xhr.status < 300;
+                    var txt = xhr.responseText || "";
+                    resolve({
+                        ok: ok,
+                        status: xhr.status,
+                        text: function () { return Promise.resolve(txt); },
+                        json: function () {
+                            try { return Promise.resolve(JSON.parse(txt)); }
+                            catch (e) { return Promise.reject(e); }
+                        }
+                    });
+                };
+                xhr.onerror = function () { reject(new Error("XHR network error")); };
+                xhr.send();
+            });
+        };
+    }
+})();
+
 var App = (function () {
     "use strict";
 
+    var IS_PS4 = /PlayStation 4/i.test(navigator.userAgent || "") ||
+                 (window.location.search && window.location.search.indexOf("platform=ps4") !== -1);
+
     function log(msg) {
-        console.log("[PStream PS5]", msg);
+        console.log(IS_PS4 ? "[PStream PS4]" : "[PStream PS5]", msg);
         try {
             fetch("/log?msg=" + encodeURIComponent(msg));
         } catch (e) { }
@@ -94,12 +161,44 @@ var App = (function () {
     var TMDb = (function () {
         var API_KEY = "adc5047f27e588c9347087931a696cf4";
         var BASE = "https://api.themoviedb.org/3";
-        var LANG_MAP = { "eng": "en-US", "ita": "it-IT", "ger": "de-DE", "esp": "es-ES", "fra": "fr-FR" };
+        var LANG_MAP = { "eng": "en-US", "ita": "it-IT", "ger": "de-DE", "esp": "es-ES", "fra": "fr-FR", "por": "pt-BR" };
 
-        function getLang(p) { return LANG_MAP[p] || "en-US"; }
+        function getLang(p) {
+            if (!p) return "en-US";
+            if (p.indexOf("-") !== -1) return p;
+            return LANG_MAP[p] || "en-US";
+        }
+
+        function imgUrl(size, relPath) {
+            if (!relPath) return "";
+            if (IS_PS4) {
+                return "/api/img?size=" + encodeURIComponent(size) + "&path=" + encodeURIComponent(relPath);
+            }
+            return "https://image.tmdb.org/t/p/" + size + relPath;
+        }
+
+        function buildLocalTmdbUrl(path, params, langCode) {
+            var q = "api_key=" + API_KEY + "&language=" + encodeURIComponent(langCode);
+            if (params) {
+                for (var k in params) {
+                    if (params.hasOwnProperty(k)) {
+                        q += "&" + encodeURIComponent(k) + "=" + encodeURIComponent(params[k]);
+                    }
+                }
+            }
+            return "/api/tmdb?path=" + encodeURIComponent(path + "?" + q);
+        }
 
         function get(path, params, lang) {
-            var url = BASE + path + "?api_key=" + API_KEY + "&language=" + getLang(lang);
+            var langCode = getLang(lang);
+            var localProxyUrl = buildLocalTmdbUrl(path, params, langCode);
+            if (IS_PS4) {
+                return fetch(localProxyUrl).then(function (r) {
+                    if (!r.ok) throw new Error("TMDb proxy error " + r.status);
+                    return r.json();
+                });
+            }
+            var url = BASE + path + "?api_key=" + API_KEY + "&language=" + langCode;
             if (params) {
                 for (var k in params) {
                     if (params.hasOwnProperty(k)) {
@@ -110,6 +209,11 @@ var App = (function () {
             return fetch(url).then(function (r) {
                 if (!r.ok) throw new Error("TMDb error " + r.status);
                 return r.json();
+            }).catch(function () {
+                return fetch(localProxyUrl).then(function (r2) {
+                    if (!r2.ok) throw new Error("TMDb fallback error " + r2.status);
+                    return r2.json();
+                });
             });
         }
 
@@ -118,8 +222,8 @@ var App = (function () {
             var title = it.title || it.name || it.original_title || "Unknown";
             var date = it.release_date || it.first_air_date || "";
             var year = date ? date.substring(0, 4) : "";
-            var poster = it.poster_path ? ("https://image.tmdb.org/t/p/w500" + it.poster_path) : "";
-            var backdrop = it.backdrop_path ? ("https://image.tmdb.org/t/p/w1280" + it.backdrop_path) : "";
+            var poster = it.poster_path ? imgUrl("w500", it.poster_path) : "";
+            var backdrop = it.backdrop_path ? imgUrl("w1280", it.backdrop_path) : "";
             var rating = it.vote_average ? Math.round(it.vote_average * 10) / 10 : 8.0;
             var matchPct = Math.min(99, Math.max(75, Math.round(rating * 10 + 15)));
             return {
@@ -326,8 +430,8 @@ var App = (function () {
                         genres: genres,
                         cast: cast,
                         director: director,
-                        poster: data.poster_path ? ("https://image.tmdb.org/t/p/w500" + data.poster_path) : "",
-                        backdrop: data.backdrop_path ? ("https://image.tmdb.org/t/p/w1280" + data.backdrop_path) : "",
+                        poster: data.poster_path ? imgUrl("w500", data.poster_path) : "",
+                        backdrop: data.backdrop_path ? imgUrl("w1280", data.backdrop_path) : "",
                         seasons: seasons,
                         recommendations: recs
                     };
@@ -344,8 +448,8 @@ var App = (function () {
                                 episode_number: ep.episode_number,
                                 name: ep.name || ("Episode " + ep.episode_number),
                                 overview: ep.overview || "",
-                                still: ep.still_path ? ("https://image.tmdb.org/t/p/w500" + ep.still_path) : "",
-                                still_path: ep.still_path ? ("https://image.tmdb.org/t/p/w500" + ep.still_path) : "",
+                                still: ep.still_path ? imgUrl("w500", ep.still_path) : "",
+                                still_path: ep.still_path ? imgUrl("w500", ep.still_path) : "",
                                 runtime: ep.runtime ? (ep.runtime + "m") : ""
                             };
                         })
@@ -385,13 +489,26 @@ var App = (function () {
         detailModal = document.getElementById("detail-modal");
 
         // Load Settings
-        var validProviders = ["eng", "ger", "ita", "esp", "fra"];
+        var validProviders = ["eng", "ger", "ita", "esp", "fra", "por"];
         var savedProv = localStorage.getItem(PROVIDER_KEY);
         if (savedProv && validProviders.indexOf(savedProv) !== -1) {
             state.activeProvider = savedProv;
         } else {
             state.activeProvider = "eng";
             savedProv = null;
+        }
+
+        if (IS_PS4) {
+            var platSub = document.getElementById("sys-platform-sub");
+            var appIdEl = document.getElementById("sys-app-id");
+            var appCatEl = document.getElementById("sys-app-cat");
+            var verHintEl = document.getElementById("settings-version-hint");
+            var ps4ExitBtn = document.getElementById("btn-ps4-exit");
+            if (platSub) platSub.innerText = "PS4 Standalone fPKG (Zero PC)";
+            if (appIdEl) appIdEl.innerText = "PSTR00004";
+            if (appCatEl) appCatEl.innerText = "Orbis OS Native App";
+            if (verHintEl) verHintEl.innerText = "PStream PS4 Standalone v1.1.0 (Zero PC Required)";
+            if (ps4ExitBtn) ps4ExitBtn.style.display = "inline-flex";
         }
 
         var savedSkip = parseInt(localStorage.getItem(SKIP_KEY), 10);
@@ -613,7 +730,10 @@ var App = (function () {
             "&season=" + encodeURIComponent(state.currentSeason) +
             "&episode=" + encodeURIComponent(state.currentEpisode) +
             "&provider=" + encodeURIComponent(state.activeProvider) +
-            "&lang=" + encodeURIComponent(provLang);
+            "&lang=" + encodeURIComponent(provLang) +
+            "&title=" + encodeURIComponent(item.title || "") +
+            "&year=" + encodeURIComponent(item.year || "") +
+            (IS_PS4 ? "&segproxy=1" : "");
 
         log("Resolving direct stream: " + resolveUrl);
 
@@ -621,7 +741,13 @@ var App = (function () {
             .then(function (res) { return res.json(); })
             .then(function (data) {
                 if (data.status === "ok" && data.streamUrl) {
-                    loadHlsStream(data.streamUrl);
+                    if (data.type === "mp4") {
+                        playerVideo.src = data.streamUrl;
+                        playerVideo.play().catch(function () {});
+                        hideSpinner();
+                    } else {
+                        loadHlsStream(data.streamUrl);
+                    }
                 } else {
                     hideSpinner();
                     showErrorModal(data.error || "Ad-free stream unavailable from this provider.");
@@ -645,10 +771,10 @@ var App = (function () {
         if (window.Hls && Hls.isSupported()) {
             hlsInstance = new Hls({
                 enableWorker: false,
-                maxBufferSize: 60 * 1024 * 1024,
-                maxBufferLength: 30,
-                maxMaxBufferLength: 60,
-                backBufferLength: 15,
+                maxBufferSize: IS_PS4 ? (24 * 1024 * 1024) : (60 * 1024 * 1024),
+                maxBufferLength: IS_PS4 ? 20 : 30,
+                maxMaxBufferLength: IS_PS4 ? 40 : 60,
+                backBufferLength: IS_PS4 ? 10 : 15,
                 maxBufferHole: 0.8,
                 maxFragLookUpTolerance: 0.5,
                 nudgeOffset: 0.2,
@@ -2315,6 +2441,10 @@ var App = (function () {
             .then(function (res) { return res.json(); })
             .then(function (data) {
                 log("Update check response: " + JSON.stringify(data));
+                var sysVer = document.getElementById("sys-installed-ver");
+                if (sysVer && data.current_version) {
+                    sysVer.innerText = "v" + data.current_version;
+                }
                 if (data.update_available) {
                     var hint = document.getElementById("settings-version-hint");
                     if (hint) {

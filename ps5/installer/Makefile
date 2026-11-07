@@ -9,16 +9,20 @@ else
 endif
 
 ELF := pstream-install.elf
+UNINSTALL_ELF := pstream-uninstall.elf
 
-CFLAGS := -Wall -Werror -g -DTITLE_ID="\"PSTR00001\""
+CFLAGS := -Wall -Werror -O2 -DTITLE_ID="\"PSTR00001\""
 LDADD  := -lSceIpmi -lSceAppInstUtil -lSceNet
 
-all: $(ELF)
+all: $(ELF) $(UNINSTALL_ELF)
 
 $(ELF): main.c sce_sys/param.json sce_sys/icon0.png sce_sys/pic1.png \
         ../www/index.html ../www/app.js ../www/app.css ../www/input.js ../www/hls.min.js ../www/logo.png ../www/favicon.png ../www/version.json \
         ../scripts/pstream-service.elf
-	$(CC) $(CFLAGS) $(LDADD) -o $@ main.c
+	$(CC) $(CFLAGS) -o $@ main.c $(LDADD)
+
+$(UNINSTALL_ELF): uninstall.c
+	$(CC) $(CFLAGS) -o $@ uninstall.c $(LDADD)
 
 clean:
-	rm -f $(ELF)
+	rm -f $(ELF) $(UNINSTALL_ELF)

@@ -57,7 +57,7 @@
 
     <!-- Netflix Cinematic Billboard -->
     <section class="billboard" id="billboard-section">
-        <img id="billboard-backdrop" class="billboard-backdrop" src="https://image.tmdb.org/t/p/w1280/xOMo8BRK7PfcJv9JCnx7s520Drq.jpg" alt="Backdrop">
+        <img id="billboard-backdrop" class="billboard-backdrop" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="Backdrop">
         <div class="billboard-vignette">
             <div class="billboard-badge" id="billboard-badge">
                 <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
@@ -270,6 +270,7 @@
                                     <button class="setting-pill" data-provider="ita"><span class="lang-tag">ITA</span> Italiano</button>
                                     <button class="setting-pill" data-provider="esp"><span class="lang-tag">ESP</span> Español</button>
                                     <button class="setting-pill" data-provider="fra"><span class="lang-tag">FRA</span> Français</button>
+                                    <button class="setting-pill" data-provider="por"><span class="lang-tag">POR</span> Português</button>
                                 </div>
                             </div>
 
@@ -387,13 +388,13 @@
                             <div class="setting-group">
                                 <div class="setting-title-row">
                                     <label class="setting-label">PStream Core System & Architecture</label>
-                                    <span class="setting-hint">Running as native PlayStation 5 Media Daemon with BigApp container integration</span>
+                                    <span class="setting-hint" id="sys-arch-hint">Running as native PlayStation Media Engine with local hardware stream proxy</span>
                                 </div>
                                 <div class="system-status-grid">
                                     <div class="system-status-card">
                                         <span class="system-card-title">Installed Version</span>
-                                        <span class="system-card-val" id="sys-installed-ver">v1.0.2</span>
-                                        <span class="system-card-sub">PS5 Standalone (Zero PC)</span>
+                                        <span class="system-card-val" id="sys-installed-ver">v1.1.0</span>
+                                        <span class="system-card-sub" id="sys-platform-sub">PS5 Standalone (Zero PC)</span>
                                     </div>
                                     <div class="system-status-card">
                                         <span class="system-card-title">Daemon Endpoint</span>
@@ -402,8 +403,8 @@
                                     </div>
                                     <div class="system-status-card">
                                         <span class="system-card-title">Application ID</span>
-                                        <span class="system-card-val">PSTR00001</span>
-                                        <span class="system-card-sub">Media Category: 66048</span>
+                                        <span class="system-card-val" id="sys-app-id">PSTR00001</span>
+                                        <span class="system-card-sub" id="sys-app-cat">Media Category: 66048</span>
                                     </div>
                                 </div>
                             </div>
@@ -411,12 +412,15 @@
                             <div class="setting-group" style="margin-top:28px;">
                                 <div class="setting-title-row">
                                     <label class="setting-label">GitHub Auto-Update Synchronization</label>
-                                    <span class="setting-hint" id="settings-version-hint">PStream PS5 Standalone v1.0.2 (Zero PC Required)</span>
+                                    <span class="setting-hint" id="settings-version-hint">PStream Standalone v1.1.0 (Zero PC Required)</span>
                                 </div>
                                 <div style="display:flex;gap:16px;margin-top:10px;align-items:center;flex-wrap:wrap;">
                                     <button id="btn-check-update" class="btn-setting-action" style="border-color:var(--theme-accent);color:#fff;background:rgba(229,9,20,0.18);">
                                         <svg viewBox="0 0 24 24" style="width:16px;height:16px;margin-right:6px;fill:currentColor;vertical-align:text-bottom;"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
                                         Check for Updates
+                                    </button>
+                                    <button id="btn-ps4-exit" class="btn-setting-action btn-danger" style="display:none;" onclick="window.location.href='pstream:exit'">
+                                        Exit PStream to PS4 Home
                                     </button>
                                     <span id="update-status-text" style="font-size:14px;color:#aaa;font-weight:600;"></span>
                                 </div>
